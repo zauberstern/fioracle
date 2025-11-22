@@ -133,32 +133,38 @@ class DataPipeline:
         return data_dict
     
     def _load_gpr(self) -> pd.Series:
-        """Load Geopolitical Risk Index (daily or monthly fallback)."""
-        gpr_daily_path = self.data_dir / "GPRI" / "GPRI_Daily.xls"
-        gpr_monthly_path = self.data_dir / "GPRI" / "GPRI_Monthly.xls"
+        """
+        Load Geopolitical Risk Index (daily).
         
-        try:
-            # Try daily first
-            df = pd.read_excel(gpr_daily_path, sheet_name='Sheet1')
-            df['date'] = pd.to_datetime(df['DAY'].astype(str), format='%Y%m%d')
-            df = df.set_index('date')
-            return df['GPRD'].sort_index()
-        except:
-            # Fall back to monthly
-            df = pd.read_excel(gpr_monthly_path, sheet_name='Sheet1')
-            df['date'] = pd.to_datetime(df['month'])
-            df = df.set_index('date')
-            return df['GPR'].sort_index()
+        Uses the combined daily dataset (1900-2025) generated via Chow-Lin disaggregation.
+        """
+        gpr_combined_path = self.data_dir / "GPRI" / "gpr_daily_1900_2025.csv"
+        
+        if not gpr_combined_path.exists():
+            warnings.warn(f"Combined GPR file not found: {gpr_combined_path}")
+            return pd.Series(dtype=float)
+            
+        # Load with first column as index (date)
+        df = pd.read_csv(gpr_combined_path, index_col=0, parse_dates=True)
+        df.index.name = 'date'
+        return df['GPRD'].sort_index()
     
     def _load_epu(self) -> pd.Series:
-        """Load Economic Policy Uncertainty Index (daily)."""
-        epu_path = self.data_dir / "EPU" / "US_EPU_Daily.csv"
+        """
+        Load Economic Policy Uncertainty Index (daily).
         
-        df = pd.read_csv(epu_path)
-        df['date'] = pd.to_datetime(df[['year', 'month', 'day']])
-        df = df.set_index('date')
+        Uses the combined daily dataset (1900-2025) generated via Chow-Lin disaggregation.
+        """
+        epu_combined_path = self.data_dir / "EPU" / "epu_daily_1900_2025.csv"
         
-        return df['daily_policy_index'].sort_index()
+        if not epu_combined_path.exists():
+            warnings.warn(f"Combined EPU file not found: {epu_combined_path}")
+            return pd.Series(dtype=float)
+            
+        # Load with first column as index (date)
+        df = pd.read_csv(epu_combined_path, index_col=0, parse_dates=True)
+        df.index.name = 'date'
+        return df['EPU'].sort_index()
     
     def _load_shiller(self) -> pd.DataFrame:
         """Load Shiller stock/bond data (monthly, parses YYYY.MM format)."""
