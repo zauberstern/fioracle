@@ -20,14 +20,14 @@ class TestEndToEndPipeline:
         
         try:
             # Step 1: Load data
-            pipeline = DataPipeline(mode='basic')
+            pipeline = DataPipeline()
             data = pipeline.load('2000-01-01', '2005-12-31')
             
             assert data is not None
             assert len(data) > 0
             
             # Step 2: Engineer features
-            asset_features, macro_features = engineer_features(data, complexity='basic')
+            asset_features, macro_features = engineer_features(data)
             
             assert len(asset_features) > 0
             assert len(macro_features) > 0
@@ -75,7 +75,7 @@ class TestDataToFeaturesPipeline:
     
     def test_data_features_integration(self, sample_data):
         """Test that data can flow into feature engineering."""
-        asset_features, macro_features = engineer_features(sample_data, complexity='basic')
+        asset_features, macro_features = engineer_features(sample_data)
         
         # Verify outputs are compatible
         assert isinstance(asset_features, dict)
@@ -187,8 +187,8 @@ class TestCachingIntegration:
         pd.testing.assert_frame_equal(loaded_data, sample_data)
         
         # Engineer features on both
-        features1, macro1 = engineer_features(sample_data, complexity='basic')
-        features2, macro2 = engineer_features(loaded_data, complexity='basic')
+        features1, macro1 = engineer_features(sample_data)
+        features2, macro2 = engineer_features(loaded_data)
         
         # Features should be identical
         assert set(features1.keys()) == set(features2.keys())
@@ -202,11 +202,11 @@ class TestErrorHandling:
     
     def test_invalid_date_range(self):
         """Test handling of invalid date ranges."""
-        pipeline = DataPipeline(mode='basic')
+        pipeline = DataPipeline()
         
         # End date before start date
-        with pytest.raises((ValueError, Exception)):
-            pipeline.load('2020-01-01', '2019-01-01')
+        data = pipeline.load('2020-01-01', '2019-01-01')
+        assert data.empty
     
     def test_empty_features_dict(self):
         """Test handling of empty features."""
@@ -292,7 +292,7 @@ class TestWalkForwardValidation:
     def test_walk_forward_splits(self):
         """Test that walk-forward creates correct splits."""
         try:
-            pipeline = DataPipeline(mode='basic')
+            pipeline = DataPipeline()
             data = pipeline.load('2000-01-01', '2010-12-31')
             
             # Would normally use walk-forward here

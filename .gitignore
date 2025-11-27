@@ -80,8 +80,7 @@ data/cache/
 *.parquet
 *.h5
 *.hdf5
-*.csv
-!data/*.csv
+data_daily/
 
 # CRITICAL: API Credentials (NEVER COMMIT)
 config/lseg_config.yaml
@@ -128,3 +127,5 @@ dmypy.json
 # profiling data
 .prof
 
+src/disaggregation
+src/tools

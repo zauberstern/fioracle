@@ -6,7 +6,35 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from src.core.features import engineer_features, compute_asset_features, compute_macro_features
+from src.core.features import engineer_features, compute_asset_features
+
+EXPECTED_ASSET_FEATURE_COLUMNS = {
+    'avg_return_hl5',
+    'avg_return_hl10',
+    'avg_return_hl21',
+    'log_dd_hl5',
+    'log_dd_hl21',
+    'sortino_hl5',
+    'sortino_hl10',
+    'sortino_hl21',
+}
+
+EXPECTED_MACRO_FEATURE_COLUMNS = {
+    'vix_logdiff_ewma_63d',
+    'epu_logdiff_ewma_21d',
+    'globalization_logdiff_ewma_21d',
+    'economic_freedom_logdiff_ewma_21d',
+    'broad_money_logdiff_ewma_63d',
+    'debt_to_gdp_ratio',
+    'daily_inflation_rate',
+    'unemployment_rate',
+    'gdp_growth_rate',
+    'yield_2y_change',
+    'yield_2y_change_ewma_21d',
+    'yield_curve_slope_ewma_10d',
+    'yield_curve_slope_change_ewma_21d',
+    'stock_bond_corr_252d',
+}
 
 
 class TestEngineerFeatures:
@@ -14,30 +42,29 @@ class TestEngineerFeatures:
     
     def test_engineer_features_basic(self, sample_data):
         """Test basic feature engineering."""
-        asset_features, macro_features = engineer_features(sample_data, complexity='basic')
+        asset_features, macro_features = engineer_features(sample_data)
         
         # Check we got outputs
         assert isinstance(asset_features, dict)
         assert isinstance(macro_features, pd.DataFrame)
         
         # Check macro features
-        assert len(macro_features) > 0
-        assert macro_features.shape[1] >= 3  # At least 3 macro features
+        assert set(macro_features.columns) == EXPECTED_MACRO_FEATURE_COLUMNS
+        assert macro_features.notna().any().all()
     
     def test_engineer_features_output_structure(self, sample_data):
         """Test output structure of engineered features."""
-        asset_features, macro_features = engineer_features(sample_data, complexity='basic')
+        asset_features, macro_features = engineer_features(sample_data)
         
         # Each asset should have features
         for asset, features in asset_features.items():
             assert isinstance(features, pd.DataFrame)
             assert len(features) > 0
-            # Should have multiple features per asset
-            assert features.shape[1] >= 10
+            assert set(features.columns) == EXPECTED_ASSET_FEATURE_COLUMNS
     
     def test_engineer_features_index_alignment(self, sample_data):
         """Test that feature indices are aligned with input data."""
-        asset_features, macro_features = engineer_features(sample_data, complexity='basic')
+        asset_features, macro_features = engineer_features(sample_data)
         
         # Macro features index should be subset of input data index
         assert macro_features.index.isin(sample_data.index).all()
@@ -54,71 +81,42 @@ class TestComputeAssetFeatures:
         """Test that asset features have expected shape."""
         for col in sample_returns.columns:
             returns = sample_returns[col]
-            features = compute_asset_features(returns, lookback=252)
+            features = compute_asset_features(returns)
             
-            # Should have multiple features
             assert isinstance(features, pd.DataFrame)
-            assert features.shape[1] > 0
-            # Should have same or fewer rows (due to lookback)
-            assert len(features) <= len(returns)
+            assert set(features.columns) == EXPECTED_ASSET_FEATURE_COLUMNS
+            assert len(features) == len(returns)
     
-    def test_compute_asset_features_contains_return(self, sample_returns):
-        """Test that asset features include return column."""
+    def test_compute_asset_features_contains_expected_features(self, sample_returns):
+        """Test that asset features include the expected set."""
         returns = sample_returns.iloc[:, 0]
         features = compute_asset_features(returns)
         
-        assert 'return' in features.columns
+        assert set(features.columns) == EXPECTED_ASSET_FEATURE_COLUMNS
     
     def test_compute_asset_features_no_nans_in_main_features(self, sample_returns):
         """Test that main features don't have excessive NaNs."""
         returns = sample_returns.iloc[:, 0]
-        features = compute_asset_features(returns, lookback=252)
+        features = compute_asset_features(returns)
         
-        # After initial lookback period, should have valid features
-        features_after_warmup = features.iloc[252:]
-        
-        # Most features should be non-NaN after warmup
-        for col in features_after_warmup.columns:
-            nan_pct = features_after_warmup[col].isna().sum() / len(features_after_warmup)
-            assert nan_pct < 0.5, f"Feature {col} has {nan_pct*100:.1f}% NaN values"
+        for col in features.columns:
+            valid = features[col].dropna()
+            if len(valid) == 0:
+                continue
+            nan_pct = features[col].isna().mean()
+            assert nan_pct < 0.5, f"{col} has too many NaNs"
     
-    def test_compute_asset_features_volatility_positive(self, sample_returns):
-        """Test that volatility features are positive."""
+    def test_compute_asset_features_standardized(self, sample_returns):
+        """Test that features are standardized (zero mean)."""
         returns = sample_returns.iloc[:, 0]
         features = compute_asset_features(returns)
         
-        # Find volatility-related columns
-        vol_cols = [c for c in features.columns if 'vol' in c.lower() or 'std' in c.lower()]
-        
-        for col in vol_cols:
-            valid_values = features[col].dropna()
-            assert (valid_values >= 0).all(), f"{col} has negative values"
-
-
-class TestComputeMacroFeatures:
-    """Tests for macro feature computation."""
-    
-    def test_compute_macro_features_basic(self, sample_data):
-        """Test basic macro feature computation."""
-        macro_features = compute_macro_features(sample_data, complexity='basic')
-        
-        assert isinstance(macro_features, pd.DataFrame)
-        assert len(macro_features) > 0
-        assert macro_features.shape[1] >= 3
-    
-    def test_compute_macro_features_index_alignment(self, sample_data):
-        """Test that macro features are aligned with input."""
-        macro_features = compute_macro_features(sample_data)
-        
-        # Index should be subset of input data
-        assert macro_features.index.isin(sample_data.index).all()
-    
-    def test_compute_macro_features_no_infinite_values(self, sample_data):
-        """Test that macro features don't contain infinite values."""
-        macro_features = compute_macro_features(sample_data)
-        
-        for col in macro_features.columns:
-            assert not np.isinf(macro_features[col]).any(), f"{col} contains infinite values"
+        for col in features.columns:
+            valid = features[col].dropna()
+            if valid.empty:
+                continue
+            mean_val = valid.mean()
+            assert abs(mean_val) < 1e-6, f"{col} not centered"
 
 
 class TestFeatureEngineering:
@@ -129,12 +127,20 @@ class TestFeatureEngineering:
         # Create minimal dataset
         dates = pd.date_range('2000-01-01', '2000-12-31', freq='D')
         data = pd.DataFrame({
-            'gpr_index': np.random.randn(len(dates)) + 100,
-            'epu_index': np.random.randn(len(dates)) + 50,
-            'bond_10y': np.random.randn(len(dates)) * 0.1 + 3.0,
+            'asset_us_10y_gov_bond': np.random.randn(len(dates)).cumsum() + 100,
+            'asset_us_risk_free_rate': np.random.randn(len(dates)).cumsum() + 50,
+            'macro_vix_close': np.abs(np.random.randn(len(dates)) + 20),
+            'macro_epu_index': np.abs(np.random.randn(len(dates)) + 30),
+            'macro_globalization_index': np.abs(np.random.randn(len(dates)) + 40),
+            'macro_economic_freedom_index': np.abs(np.random.randn(len(dates)) + 6),
+            'macro_us_broad_money_series': np.abs(np.random.randn(len(dates)) + 500),
+            'macro_us_debt_to_gdp_ratio': np.abs(np.random.randn(len(dates)) + 60),
+            'macro_us_cpi_level': np.abs(np.random.randn(len(dates)) + 200),
+            'macro_us_unemployment': np.abs(np.random.randn(len(dates)) + 4),
+            'macro_us_gdp_growth': np.random.randn(len(dates)) * 0.1,
         }, index=dates)
         
-        asset_features, macro_features = engineer_features(data, complexity='basic')
+        asset_features, macro_features = engineer_features(data)
         
         # Should still produce outputs
         assert len(asset_features) > 0
@@ -146,15 +152,23 @@ class TestFeatureEngineering:
         np.random.seed(42)
         
         data = pd.DataFrame({
-            'gpr_index': np.random.randn(len(dates)) + 100,
-            'epu_index': np.random.randn(len(dates)) + 50,
-            'bond_10y': np.random.randn(len(dates)) * 0.1 + 3.0,
+            'asset_us_10y_gov_bond': np.random.randn(len(dates)).cumsum() + 100,
+            'asset_us_risk_free_rate': np.random.randn(len(dates)).cumsum() + 50,
+            'macro_vix_close': np.abs(np.random.randn(len(dates)) + 20),
+            'macro_epu_index': np.abs(np.random.randn(len(dates)) + 30),
+            'macro_globalization_index': np.abs(np.random.randn(len(dates)) + 40),
+            'macro_economic_freedom_index': np.abs(np.random.randn(len(dates)) + 6),
+            'macro_us_broad_money_series': np.abs(np.random.randn(len(dates)) + 500),
+            'macro_us_debt_to_gdp_ratio': np.abs(np.random.randn(len(dates)) + 60),
+            'macro_us_cpi_level': np.abs(np.random.randn(len(dates)) + 200),
+            'macro_us_unemployment': np.abs(np.random.randn(len(dates)) + 4),
+            'macro_us_gdp_growth': np.random.randn(len(dates)) * 0.1,
         }, index=dates)
         
         # Introduce some NaN values
-        data.loc[data.index[10:20], 'gpr_index'] = np.nan
+        data.loc[data.index[10:20], 'macro_epu_index'] = np.nan
         
-        asset_features, macro_features = engineer_features(data, complexity='basic')
+        asset_features, macro_features = engineer_features(data)
         
         # Should still work despite NaNs
         assert len(asset_features) > 0

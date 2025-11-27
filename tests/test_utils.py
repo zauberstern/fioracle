@@ -43,7 +43,6 @@ class TestLoadConfig:
         """Test loading existing config file."""
         config = load_config(str(temp_config))
         assert 'data' in config
-        assert config['data']['mode'] == 'basic'
         assert config['data']['start_date'] == '2000-01-01'
     
     def test_load_config_missing_file(self):
@@ -66,7 +65,6 @@ class TestLoadConfig:
         assert 'output' in config
         
         # Check specific values
-        assert config['data']['mode'] == 'basic'
         assert config['regimes']['jump_model']['default_lambda'] == 5.0
         assert config['portfolio']['gamma_risk'] == 10.0
 

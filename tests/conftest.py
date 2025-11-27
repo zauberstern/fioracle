@@ -15,12 +15,21 @@ def sample_data():
     np.random.seed(42)
     
     data = pd.DataFrame({
-        'gpr_index': np.random.randn(len(dates)).cumsum() + 100,
-        'epu_index': np.random.randn(len(dates)).cumsum() + 50,
-        'sp500': np.random.randn(len(dates)).cumsum() + 1000,
-        'bond_10y': np.random.randn(len(dates)) * 0.1 + 3.0,
-        'corp_aaa': np.random.randn(len(dates)) * 0.1 + 4.0,
-        'corp_baa': np.random.randn(len(dates)) * 0.1 + 5.0,
+        'asset_us_10y_gov_bond': np.random.randn(len(dates)).cumsum() + 100,
+        'asset_us_risk_free_rate': np.random.randn(len(dates)).cumsum() + 50,
+        'asset_us_treasury_2y_yield': np.abs(np.random.randn(len(dates)) + 3.0),
+        'asset_us_10y2y_slope': np.random.randn(len(dates)) * 0.5,
+        'asset_sp500_index': 2500 + np.random.randn(len(dates)).cumsum(),
+        'asset_bloomberg_us_aggregate_total_return': 100 + np.random.randn(len(dates)).cumsum(),
+        'macro_vix_close': np.abs(np.random.randn(len(dates)) * 5 + 25),
+        'macro_epu_index': np.abs(np.random.randn(len(dates)).cumsum() + 80),
+        'macro_globalization_index': np.abs(np.random.randn(len(dates)).cumsum() + 30),
+        'macro_economic_freedom_index': np.abs(np.random.randn(len(dates)).cumsum() + 6),
+        'macro_us_broad_money_series': np.abs(np.random.randn(len(dates)).cumsum() + 500),
+        'macro_us_debt_to_gdp_ratio': np.abs(np.random.randn(len(dates)) + 60),
+        'macro_us_cpi_level': np.abs(np.random.randn(len(dates)).cumsum() + 200),
+        'macro_us_unemployment': np.abs(np.random.randn(len(dates)) + 4.0),
+        'macro_us_gdp_growth': np.random.randn(len(dates)) * 0.1,
     }, index=dates)
     
     return data
@@ -107,7 +116,6 @@ def temp_config(tmp_path):
     """Create temporary config file for testing."""
     config_content = """
 data:
-  mode: basic
   start_date: '2000-01-01'
   end_date: '2010-12-31'
   cache_dir: 'data/cache'

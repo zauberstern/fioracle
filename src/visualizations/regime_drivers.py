@@ -102,18 +102,31 @@ def visualize_regime_drivers(start_date='2001-01-01', end_date='2010-12-31',
     
     # Load data
     print("Loading data...")
-    pipeline = DataPipeline(mode='basic')
+    pipeline = DataPipeline()
     data = pipeline.load(start_date, end_date)
     
     # Engineer features
     print("Engineering features...")
     asset_features, macro_features = engineer_features(data)
     
-    # Extract returns
+    # Build returns from raw data (excess returns vs risk-free)
+    risk_free_col = [c for c in data.columns if 'risk_free' in c]
+    rf_returns = data[risk_free_col[0]].pct_change() if risk_free_col else 0
+    
     asset_returns = {}
-    for asset, features in asset_features.items():
-        if 'return' in features.columns:
-            asset_returns[asset] = features['return'].copy()
+    non_return_cols = {'asset_us_treasury_2y_yield', 'asset_us_10y2y_slope'}
+    for col in data.columns:
+        if col.startswith('asset_') and col not in non_return_cols:
+            if risk_free_col and col == risk_free_col[0]:
+                continue
+            asset_return = data[col].pct_change()
+            if isinstance(rf_returns, pd.Series):
+                excess_return = asset_return - rf_returns
+            else:
+                excess_return = asset_return
+            asset_name = col.replace('asset_', '').upper()
+            if asset_name in asset_features:
+                asset_returns[asset_name] = excess_return
     
     returns_df = pd.DataFrame(asset_returns)
     
@@ -136,10 +149,10 @@ def visualize_regime_drivers(start_date='2001-01-01', end_date='2010-12-31',
     
     # Get VIX (prioritize actual VIX, fall back to proxy)
     vix = None
-    if 'vix' in macro_features.columns:
-        vix = macro_features['vix']
-    elif 'vix_proxy' in macro_features.columns:
-        vix = macro_features['vix_proxy']
+    if 'vix_level' in macro_features.columns:
+        vix = macro_features['vix_level']
+    elif 'vix_ewm_63d' in macro_features.columns:
+        vix = macro_features['vix_ewm_63d']
     
     print("Creating visualization...")
     

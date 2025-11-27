@@ -42,10 +42,15 @@ def get_default_config() -> Dict[str, Any]:
     """Fallback configuration if config.yaml not found."""
     return {
         'data': {
-            'mode': 'basic',
             'start_date': '1985-01-01',
-            'end_date': '2010-12-31',
+            'end_date': '2025-11-12',
             'cache_dir': 'data/cache',
+            'train_start': '1945-01-01',
+            'train_end': '1977-05-06',
+            'val_start': '1977-05-07',
+            'val_end': '1993-07-08',
+            'test_start': '1993-07-09',
+            'test_end': '2025-11-12',
         },
         'assets': {
             'basic': ['SP500', 'BOND_10Y', 'CORP_AAA', 'CORP_BAA'],
