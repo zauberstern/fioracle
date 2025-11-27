@@ -15,7 +15,6 @@ from core import (
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Fioracle')
-    parser.add_argument('--mode', choices=['basic', 'full'], default='basic')
     parser.add_argument('--config', default='config/config.yaml')
     parser.add_argument('--output-dir', default='output')
     parser.add_argument('--split', choices=['train', 'val', 'test', 'all'], default='all',
@@ -31,9 +30,6 @@ def main():
     args = parse_args()
     logger = setup_logging(level='INFO' if args.verbose else 'WARNING')
     config = load_config(args.config)
-    
-    if args.mode:
-        config['data']['mode'] = args.mode
     
     # Determine date range based on split
     split_dates = {
@@ -64,21 +60,20 @@ def main():
     print("\n" + "="*75)
     print("Fioracle - Regime-Aware Portfolio Management")
     print("="*75)
-    print(f"Mode:       {config['data']['mode']}")
     print(f"Data Split: {args.split.upper()}")
     print(f"Date Range: {start_date} to {end_date}")
     
     if args.split == 'all':
-        print(f"\n  Training:   {config['data']['train_start']} to {config['data']['train_end']} (55 years)")
-        print(f"  Validation: {config['data']['val_start']} to {config['data']['val_end']} (10 years)")
-        print(f"  Test:       {config['data']['test_start']} to {config['data']['test_end']} (14 years)")
+        print(f"\n  Training:   {config['data']['train_start']} to {config['data']['train_end']}")
+        print(f"  Validation: {config['data']['val_start']} to {config['data']['val_end']}")
+        print(f"  Test:       {config['data']['test_start']} to {config['data']['test_end']}")
     
     print("="*75 + "\n")
     
     # STEP 1: Load Data
     print("STEP 1/5: Loading Data")
     print("-" * 40)
-    pipeline = DataPipeline(mode=config['data']['mode'])
+    pipeline = DataPipeline()
     data = pipeline.load(start_date, end_date)
     print(f"✓ Loaded {len(data)} rows, {len(data.columns)} columns")
     print(f"  Date range: {data.index[0]} to {data.index[-1]}\n")
@@ -86,22 +81,36 @@ def main():
     # STEP 2: Engineer Features
     print("STEP 2/5: Engineering Features")
     print("-" * 40)
-    asset_features, macro_features = engineer_features(data, complexity=config['data']['mode'])
+    asset_features, macro_features = engineer_features(data)
     print(f"✓ Asset features: {len(asset_features)} assets")
     print(f"✓ Macro features: {len(macro_features.columns)} features\n")
     
-    # Extract returns for each asset
+    # Build returns from raw data (excess returns vs risk-free)
+    import pandas as pd
+    risk_free_col = [c for c in data.columns if 'risk_free' in c]
+    if not risk_free_col:
+        print("❌ No risk-free rate column found!")
+        return
+    rf_returns = data[risk_free_col[0]].pct_change()
+    
     asset_returns = {}
-    for asset, features in asset_features.items():
-        if 'return' in features.columns:
-            asset_returns[asset] = features['return'].copy()
+    non_return_cols = {'asset_us_treasury_2y_yield', 'asset_us_10y2y_slope'}
+    for col in data.columns:
+        if col.startswith('asset_') and col not in non_return_cols and col != risk_free_col[0]:
+            asset_return = data[col].pct_change()
+            excess_return = asset_return - rf_returns
+            asset_name = col.replace('asset_', '').upper()
+            if asset_name in asset_features:
+                asset_returns[asset_name] = excess_return
     
     if not asset_returns:
-        print("❌ No return columns found in asset features!")
+        print("❌ No asset returns computed!")
         return
     
-    import pandas as pd
     returns_df = pd.DataFrame(asset_returns)
+    # Align returns with feature dates
+    common_idx = returns_df.index.intersection(macro_features.index)
+    returns_df = returns_df.loc[common_idx]
     print(f"  Returns shape: {returns_df.shape}")
     print(f"  Assets: {', '.join(returns_df.columns)}\n")
     

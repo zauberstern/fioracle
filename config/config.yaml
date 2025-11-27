@@ -5,21 +5,19 @@
 # DATA CONFIGURATION
 # =============================================================================
 data:
-  mode: basic  # 'basic' (20 features, fast) or 'full' (90+ features, comprehensive)
-  
   # Full historical window (1945-present)
   start_date: 1945-01-01
   end_date: 2025-11-12  # Updated to current date
   
   # Train/Validation/Test splits for optimal ML workflow
   train_start: 1945-01-01
-  train_end: 2000-12-31    # 55 years - learn long-term patterns
+  train_end: 1977-05-06    # 40% of window
   
-  val_start: 2001-01-01
-  val_end: 2010-12-31      # 10 years - tune hyperparameters
+  val_start: 1977-05-07
+  val_end: 1993-07-08      # 20% of window
   
-  test_start: 2011-01-01
-  test_end: 2025-11-12     # 14 years - out-of-sample performance
+  test_start: 1993-07-09
+  test_end: 2025-11-12     # 40% of window
   
   cache_dir: data/cache
   
