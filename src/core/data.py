@@ -1,26 +1,29 @@
 """
 Data loading and alignment pipeline.
 
-Loads multiple data sources at different frequencies (annual, monthly, daily)
-and aligns them to a unified daily timeline. Uses smart parquet caching for
-60x faster reloads.
+Loads asset universe and macro indicators at different frequencies,
+aligns them to a unified daily timeline. Handles:
+- Multiple date formats (YYYY-MM-DD, m/d/yy)
+- Different column naming conventions
+- Excludes non-investable assets (SP500, US_RISK_FREE_RATE)
 """
 
 import re
 import warnings
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
 
 import pandas as pd
+import numpy as np
 
 
 class DataPipeline:
     """
     Unified data loader with automatic alignment to daily frequency.
     
-    - Auto-caches with parquet for fast reloads
+    - Auto-excludes SP500 and US_RISK_FREE_RATE from investable assets
     - Handles multi-frequency data (annual/monthly/daily)
-    - mode: 'basic' (core features) or 'full' (comprehensive)
+    - Properly parses historical dates (1900s)
     """
 
     DATE_COLUMN_KEYS = {
@@ -40,24 +43,30 @@ class DataPipeline:
         'value',
         'price',
         'close',
+        'dgs2',      # 2Y yield
+        't10y2y',    # 10Y-2Y slope
     ]
 
     MACRO_ALIASES = {
         'gpr_daily_1900_2025': 'gpr',
         'epu_daily_1900_2025': 'epu',
         'cboe_vix': 'vix',
-        'economic_freedom_index': 'economic_freedom',
-        'globalization_index': 'globalization',
-        'us_cpi_daily_interp': 'us_cpi',
-        'us_cpi_level': 'us_cpi_level',
         'us_inflation_daily_interp': 'us_inflation',
-        'us_broad_money': 'us_broad_money',
         'us_unemployment': 'us_unemployment',
         'us_debt_to_gdp': 'us_debt_to_gdp',
         'us_gdp_growth': 'us_gdp_growth',
-        'us_exports': 'us_exports',
-        'us_imports': 'us_imports',
-        'us_bank_capital_ratio': 'us_bank_capital_ratio',
+    }
+
+    # Excluded from investable assets but loaded separately
+    EXCLUDED_INVESTABLE_FILES = {
+        'SP500_TOTAL_RETURN.csv',      # Equity - excluded per user requirement
+        'US_RISK_FREE_RATE.csv',       # Used only for excess return calculation
+    }
+    
+    # Non-return columns (yields, spreads) - not investable but useful
+    YIELD_COLUMNS = {
+        'US 2Y Yield (1976-present).csv',
+        'US 10Y2Y (1976-present).csv',
     }
 
     def __init__(
@@ -81,9 +90,12 @@ class DataPipeline:
     ) -> pd.DataFrame:
         """Load and align all data sources. Returns daily DataFrame."""
         asset_data = self._load_asset_universe()
+        yield_data = self._load_yield_data()
         macro_data = self._load_macro_universe()
+        risk_free_data = self._load_risk_free_rate()
+        sp500_data = self._load_sp500_for_correlation()  # For stock-bond correlation
 
-        frames = [df for df in (asset_data, macro_data) if not df.empty]
+        frames = [df for df in (asset_data, yield_data, macro_data, risk_free_data, sp500_data) if not df.empty]
         if not frames:
             return pd.DataFrame()
 
@@ -103,16 +115,72 @@ class DataPipeline:
             combined = combined[combined.index <= end_ts]
 
         return combined
+    
+    def _load_risk_free_rate(self) -> pd.DataFrame:
+        """Load risk-free rate separately (not as investible asset)."""
+        risk_free_path = self.asset_dir / 'US_RISK_FREE_RATE.csv'
+        
+        # Try alternative: US_CASH_RETURN as risk-free proxy
+        if not risk_free_path.exists():
+            risk_free_path = self.asset_dir / 'US_CASH_RETURN.csv'
+            
+        if not risk_free_path.exists():
+            return pd.DataFrame()
+        
+        try:
+            df = self._read_csv(risk_free_path)
+            value_col = self._select_value_column(df.columns)
+            if value_col is None:
+                return pd.DataFrame()
+            
+            series = pd.to_numeric(df[value_col], errors='coerce')
+            if series.dropna().empty:
+                return pd.DataFrame()
+            
+            return pd.DataFrame({'asset_us_risk_free_rate': series})
+        except Exception as exc:
+            warnings.warn(f"Could not load risk-free rate: {exc}")
+            return pd.DataFrame()
+    
+    def _load_sp500_for_correlation(self) -> pd.DataFrame:
+        """Load SP500 separately for stock-bond correlation (NOT investable)."""
+        sp500_path = self.asset_dir / 'SP500_TOTAL_RETURN.csv'
+        
+        if not sp500_path.exists():
+            return pd.DataFrame()
+        
+        try:
+            df = self._read_csv(sp500_path)
+            value_col = self._select_value_column(df.columns)
+            if value_col is None:
+                return pd.DataFrame()
+            
+            series = pd.to_numeric(df[value_col], errors='coerce')
+            if series.dropna().empty:
+                return pd.DataFrame()
+            
+            # Mark as non-investable via naming convention
+            return pd.DataFrame({'asset_sp500_total_return': series})
+        except Exception as exc:
+            warnings.warn(f"Could not load SP500 for correlation: {exc}")
+            return pd.DataFrame()
 
     def _load_asset_universe(self) -> pd.DataFrame:
+        """Load investable asset universe (excluding SP500 and RF)."""
         if not self.asset_dir.exists():
             return pd.DataFrame()
 
         series_dict = {}
         for path in sorted(self.asset_dir.glob('*.csv')):
+            # Skip excluded and yield files
+            if path.name in self.EXCLUDED_INVESTABLE_FILES:
+                continue
+            if path.name in self.YIELD_COLUMNS:
+                continue
+            
             try:
                 df = self._read_csv(path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 warnings.warn(f"Could not load asset file {path.name}: {exc}")
                 continue
 
@@ -136,6 +204,46 @@ class DataPipeline:
         assets_df = assets_df.sort_index()
         return assets_df
 
+    def _load_yield_data(self) -> pd.DataFrame:
+        """Load yield curve data (2Y yield, 10Y-2Y slope) as features."""
+        if not self.asset_dir.exists():
+            return pd.DataFrame()
+
+        series_dict = {}
+        
+        # Load 2Y yield
+        yield_2y_path = self.asset_dir / 'US 2Y Yield (1976-present).csv'
+        if yield_2y_path.exists():
+            try:
+                df = self._read_csv(yield_2y_path)
+                value_col = self._select_value_column(df.columns)
+                if value_col:
+                    series = pd.to_numeric(df[value_col], errors='coerce')
+                    if not series.dropna().empty:
+                        series_dict['asset_us_treasury_2y_yield'] = series
+            except Exception as exc:
+                warnings.warn(f"Could not load 2Y yield: {exc}")
+        
+        # Load 10Y-2Y slope
+        slope_path = self.asset_dir / 'US 10Y2Y (1976-present).csv'
+        if slope_path.exists():
+            try:
+                df = self._read_csv(slope_path)
+                value_col = self._select_value_column(df.columns)
+                if value_col:
+                    series = pd.to_numeric(df[value_col], errors='coerce')
+                    if not series.dropna().empty:
+                        series_dict['asset_us_10y2y_slope'] = series
+            except Exception as exc:
+                warnings.warn(f"Could not load 10Y-2Y slope: {exc}")
+
+        if not series_dict:
+            return pd.DataFrame()
+
+        yield_df = pd.DataFrame(series_dict)
+        yield_df = yield_df.sort_index()
+        return yield_df
+
     def _load_macro_universe(self) -> pd.DataFrame:
         if not self.macro_dir.exists():
             return pd.DataFrame()
@@ -144,7 +252,7 @@ class DataPipeline:
         for path in sorted(self.macro_dir.glob('*.csv')):
             try:
                 df = self._read_csv(path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 warnings.warn(f"Could not load macro file {path.name}: {exc}")
                 continue
 
@@ -177,13 +285,45 @@ class DataPipeline:
         return macro_df
 
     def _read_csv(self, path: Path) -> pd.DataFrame:
+        """Read CSV with intelligent date parsing."""
         df = pd.read_csv(path)
         date_col = self._detect_date_column(df.columns)
         if date_col is None:
             raise ValueError(f"No date column found in {path}")
 
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        date_series = df[date_col].copy()
+        
+        # Detect date format
+        format_type = self._detect_date_format(date_series)
+        
+        if format_type == 'mdyy':
+            # Parse M/D/YY format, forcing 1900s for historical data
+            parsed_dates = date_series.apply(self._parse_mdyy)
+        else:
+            # Standard parsing
+            parsed_dates = pd.to_datetime(date_series, errors='coerce', infer_datetime_format=True)
+            
+            # Fix any dates that got parsed incorrectly to future
+            if parsed_dates.notna().any():
+                future_mask = parsed_dates > pd.Timestamp('2030-01-01')
+                if future_mask.any():
+                    # Re-parse these with 1900s assumption
+                    for idx in parsed_dates[future_mask].index:
+                        parsed_dates.loc[idx] = self._parse_mdyy(date_series.loc[idx])
+
+        df[date_col] = parsed_dates
         df = df.dropna(subset=[date_col])
+        
+        # Filter to reasonable date range
+        min_date = pd.Timestamp('1800-01-01')
+        max_date = pd.Timestamp('2100-12-31')
+        valid_dates = (df[date_col] >= min_date) & (df[date_col] <= max_date)
+        df = df[valid_dates]
+        
+        if len(df) == 0:
+            warnings.warn(f"No valid dates found in {path}")
+            return pd.DataFrame()
+        
         df = df.set_index(date_col)
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
@@ -191,6 +331,42 @@ class DataPipeline:
         df = df.sort_index()
         df = df[~df.index.duplicated(keep='first')]
         return df
+
+    def _detect_date_format(self, series: pd.Series) -> str:
+        """Detect if dates are in M/D/YY format."""
+        sample_size = min(100, len(series))
+        mdyy_count = 0
+        
+        for val in series.head(sample_size):
+            if isinstance(val, str) and '/' in val:
+                parts = val.split('/')
+                if len(parts) == 3:
+                    try:
+                        year_part = parts[2]
+                        if len(year_part) == 2:
+                            mdyy_count += 1
+                    except:
+                        pass
+        
+        return 'mdyy' if mdyy_count > sample_size * 0.5 else 'standard'
+
+    def _parse_mdyy(self, date_str) -> pd.Timestamp:
+        """Parse M/D/YY format, always using 1900s for historical financial data."""
+        try:
+            if isinstance(date_str, str) and '/' in date_str:
+                parts = date_str.split('/')
+                if len(parts) == 3:
+                    month, day, year_str = parts
+                    year_int = int(year_str)
+                    
+                    # Handle 2-digit years - always use 1900s for historical data
+                    if year_int < 100:
+                        year_int += 1900
+                    
+                    return pd.Timestamp(year=int(year_int), month=int(month), day=int(day))
+            return pd.NaT
+        except:
+            return pd.NaT
 
     def _detect_date_column(self, columns: List[str]) -> Optional[str]:
         for col in columns:
@@ -202,7 +378,7 @@ class DataPipeline:
             if 'date' in str(col).lower():
                 return col
 
-        return columns[0] if columns else None
+        return columns[0] if len(columns) > 0 else None
 
     @staticmethod
     def _slugify(value: str) -> str:
@@ -225,16 +401,51 @@ class DataPipeline:
                 if norm == preferred:
                     return original
 
-        return columns[0] if columns else None
+        # Skip date-like columns
+        for original, norm in normalized.items():
+            if norm not in self.DATE_COLUMN_KEYS and 'date' not in norm:
+                return original
+                
+        return None
 
     def get_asset_list(self) -> List[str]:
+        """Get list of investable asset names."""
         if not self.asset_dir.exists():
             return []
 
         assets = []
         for path in sorted(self.asset_dir.glob('*.csv')):
+            if path.name in self.EXCLUDED_INVESTABLE_FILES:
+                continue
+            if path.name in self.YIELD_COLUMNS:
+                continue
+                
             slug = self._slugify(path.stem)
             slug = self._trim_suffix(slug, ['_total_return', '_return', '_tr'])
             assets.append(slug.upper())
 
         return assets
+    
+    def get_asset_availability(self, data: pd.DataFrame) -> Dict[str, pd.Timestamp]:
+        """
+        Get first available date for each asset.
+        
+        Assets become investable when their data becomes available.
+        
+        Returns:
+            Dict mapping asset name to first available date
+        """
+        availability = {}
+        
+        asset_cols = [c for c in data.columns if c.startswith('asset_') 
+                      and 'risk_free' not in c 
+                      and '2y_yield' not in c 
+                      and '10y2y' not in c]
+        
+        for col in asset_cols:
+            non_null = data[col].dropna()
+            if len(non_null) > 0:
+                asset_name = col.replace('asset_', '').upper()
+                availability[asset_name] = non_null.index[0]
+        
+        return availability

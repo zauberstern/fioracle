@@ -1,5 +1,6 @@
 # Fioracle Configuration
-# All settings for regime-aware portfolio optimization
+# Regime-Aware Fixed Income Portfolio Optimization
+# Based on "Dynamic Asset Allocation with Asset-Specific Regime Forecasts"
 
 # =============================================================================
 # DATA CONFIGURATION
@@ -7,69 +8,49 @@
 data:
   # Full historical window (1945-present)
   start_date: 1945-01-01
-  end_date: 2025-11-12  # Updated to current date
+  end_date: 2025-11-28
   
-  # Train/Validation/Test splits for optimal ML workflow
+  # Train/Validation/Test splits per methodology
   train_start: 1945-01-01
-  train_end: 1977-05-06    # 40% of window
+  train_end: 2004-12-31      # Training period: 1945-2005
   
-  val_start: 1977-05-07
-  val_end: 1993-07-08      # 20% of window
+  val_start: 2005-01-01
+  val_end: 2009-12-31        # Validation period: 2005-2010
   
-  test_start: 1993-07-09
-  test_end: 2025-11-12     # 40% of window
+  test_start: 2010-01-01
+  test_end: 2025-11-28       # Testing period: 2010-present
   
   cache_dir: data/cache
-  
-  sources:
-    # LSEG Refinitiv modern data (2000+)
-    lseg:
-      enabled: true
-      credential_file: config/lseg_credentials.yaml
-    
-    # FRED-MD macroeconomic indicators
-    fred_md:
-      enabled: true
-      n_components: 5  # PCA components for dimensionality reduction
-    
-    # JST Macrohistory Database (1870-2017)
-    jst:
-      enabled: true
-      start_year: 1945
-      end_year: 2017
 
 # =============================================================================
 # ASSET CONFIGURATION
 # =============================================================================
 assets:
-  # Basic mode: 9 core assets (expanded with commodities)
-  basic:
-    - SP500
-    - BOND_10Y
-    - CORP_AAA
-    - CORP_BAA
-    - BILLS_3M     # 3-month Treasury bills (cash)
-    - GOLD         # Gold (commodity/inflation hedge)
-    - SILVER       # Silver (commodity/inflation hedge)
-    - OIL          # Brent crude oil (inflation hedge)
-    - CHF          # Swiss franc (foreign currency)
-    - CH_BOND      # Swiss long-term government bonds
+  # Fixed income investable assets (EXCLUDE: SP500, US_RISK_FREE_RATE)
+  investable:
+    - US_CASH_RETURN              # T-bill proxy
+    - US_10Y_GOV_BOND_RETURN      # 10Y Treasury
+    - IBOXX_USD_TREASURY          # USD Treasuries
+    - IBOXX_USD_CORPORATE         # IG Corporate bonds
+    - CHF_TOTAL_RETURN            # Safe-haven FX
+    - GOLD_TOTAL_RETURN           # Gold
+    - US_TIPS_0_5                 # TIPS 0-5Y
+    - IBOXX_UK_IL_GILT            # UK IL Gilts
+    - US_BOND_AGG                 # US Aggregate bonds
+
+
+  # Excluded from investable universe
+  excluded:
+    - SP500_TOTAL_RETURN          # Equity - excluded per user requirement
+    - US_RISK_FREE_RATE           # Used only for excess return calculation
+    - IBOXX_USD_LIQ_IG            # Liquid IG
+    - IBOXX_USD_LIQ_HY            # Liquid HY
   
-  # Full mode: 12 assets including modern ETFs (2002+)
-  full:
-    - SP500
-    - BOND_10Y
-    - CORP_AAA
-    - CORP_BAA
-    - BILLS_3M     # 3-month Treasury bills (cash)
-    - GOLD         # Gold (commodity/inflation hedge)
-    - SILVER       # Silver (commodity/inflation hedge)
-    - OIL          # Brent crude oil (inflation hedge)
-    - CHF          # Swiss franc (foreign currency)
-    - CH_BOND      # Swiss long-term government bonds
-    - TIP          # TIPS ETF (inflation-protected, 2003+)
-    - LQD          # Investment grade corporate ETF (2002+)
-    - HYG          # High yield corporate ETF (2007+)
+  # Assets for which DD features should be excluded in JM (per paper methodology)
+  exclude_dd_features:
+    - US_BOND_AGG                 # AggBond equivalent
+    - US_10Y_GOV_BOND_RETURN      # Treasury equivalent
+    - GOLD_TOTAL_RETURN           # Gold equivalent
 
 # =============================================================================
 # REGIME IDENTIFICATION CONFIGURATION
@@ -77,7 +58,9 @@ assets:
 regimes:
   # Jump Model parameters
   jump_model:
-    lambda_candidates:  # Values to try during tuning
+    # Lambda candidates on logarithmic scale (0.0 to 100.0)
+    lambda_candidates:
+      - 0.0
       - 0.1
       - 0.5
       - 1.0
@@ -86,106 +69,144 @@ regimes:
       - 10.0
       - 20.0
       - 50.0
-    default_lambda: 5.0  # Default if not tuning
+      - 100.0
+    default_lambda: 5.0
+    
+  # Rolling framework parameters
+  rolling:
+    training_years: 11           # 11-year lookback training window
+    validation_years: 5          # 5-year validation window for lambda tuning
+    update_frequency_months: 6   # Biannual updates
   
-  # HMM parameters
+  # HMM parameters (for macro regimes)
   hmm:
-    n_states: 3  # Number of hidden states
-    covariance_type: full  # 'full', 'diag', 'spherical'
-    n_iter: 200  # Max iterations for EM algorithm
+    n_states: 3                  # Number of macro regime states
+    covariance_type: diag
+    n_iter: 200
+    persistence: 0.95            # High persistence transition probability
   
-  # XGBoost classifier parameters
+  # XGBoost classifier parameters (default hyperparameters per paper)
   xgboost:
     max_depth: 5
     n_estimators: 100
     learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
     random_state: 42
+    
+  # Output smoothing halflife candidates (days)
+  smoothing_halflives:
+    - 0
+    - 2
+    - 4
+    - 8
 
 # =============================================================================
 # FEATURE ENGINEERING CONFIGURATION
 # =============================================================================
 features:
-  # Asset-specific features (Layer C)
-  asset:
-    halflives:  # Exponential weighting half-lives (in days)
+  # Asset-specific return features (for regime identification)
+  return_features:
+    # Average return halflives (trading days)
+    avg_return_halflives:
+      - 5    # ~1 week
+      - 10   # ~2 weeks
       - 21   # ~1 month
-      - 63   # ~3 months
-      - 126  # ~6 months
     
-    windows:  # Rolling window sizes
+    # Downside deviation halflives (log-transformed)
+    dd_halflives:
+      - 5    # ~1 week
+      - 21   # ~1 month
+    
+    # Sortino ratio halflives (avg_return / dd)
+    sortino_halflives:
+      - 5
+      - 10
       - 21
-      - 63
-      - 126
   
-  # Macro features (Layers A/B)
-  macro:
-    stock_bond_correlation_window: 252  # 1 year
-    use_pca: true
-    pca_components: 10
+  # Cross-asset macro features (for forecasting)
+  # Features automatically computed based on available data files
+  macro_features_enabled:
+    - vix                    # CBOE VIX.csv → volatility index
+    - gpr                    # gpr_daily_1900_2025.csv → Geopolitical Risk
+    - us_debt_to_gdp         # US_DEBT_TO_GDP.csv → Fiscal sustainability
+    - yield_curve            # US 2Y Yield + US 10Y2Y files → yield curve slope/level
+    - stock_bond_corr        # SP500_TOTAL_RETURN.csv + Bond returns → correlation
+    # Disabled (file removed from macro_universe/):
+    # - epu                  # Economic Policy Uncertainty
+  
+  # File → Column Name Mapping (automatic):
+  #   "US 2Y Yield (1976-present).csv" → asset_us_2y_yield_...
+  #   "US 10Y2Y (1976-present).csv" → asset_us_10y2y_...
+  #   "SP500_TOTAL_RETURN.csv" → asset_sp500_total_return (loaded but NOT investable)
+  
+  # Macro feature parameters
+  macro_params:
+    vix_halflife: 63
+    gpr_halflife: 21
+    debt_gdp_halflife: 63
+    yield_2y_halflife: 21
+    slope_halflife: 10
+    stock_bond_corr_window: 252
 
 # =============================================================================
 # PORTFOLIO OPTIMIZATION CONFIGURATION
 # =============================================================================
 portfolio:
-  # Risk and trade aversion parameters
-  gamma_risk: 10.0  # Risk aversion (higher = more conservative)
-  gamma_trade: 1.0  # Trade aversion (higher = less turnover)
+  # Risk and trade aversion parameters (per paper)
+  gamma_risk: 10.0              # Risk aversion (higher = more conservative)
+  gamma_trade: 1.0              # Trade aversion (reduces turnover)
   
   # Transaction costs
-  transaction_cost: 0.0005  # 5 basis points
+  transaction_cost: 0.0005      # 5 basis points one-way
   
-  # Position limits
-  max_weight: 0.40  # Maximum 40% in any single asset
-  min_weight: 0.00  # Long-only (no shorting)
-  max_leverage: 1.0  # No leverage (sum of weights ≤ 1.0)
+  # Position limits (Constraints 3 & 4)
+  max_weight: 0.40              # Maximum 40% in any single asset
+  min_weight: 0.00              # Long-only (no shorting)
+  max_leverage: 1.0             # No leverage (sum of weights ≤ 1.0)
   
-  # Capital preservation
-  capital_preservation_threshold: 2  # Min bullish assets before going to cash
+  # Risk concentration constraint
+  min_bullish_assets: 3         # If ≤3 bullish → 100% to risk-free
   
   # Covariance estimation
-  ewmc_decay: 0.94  # Exponential weighting for covariance
+  covariance_halflife: 252      # EWM covariance halflife (1 year)
   
-  # GPR adjustment
-  use_gpr_scaling: true  # Scale correlations by geopolitical risk
+  # Return forecasting
+  bearish_return_cap: -0.001    # Cap bearish returns at -10 bps
+  bullish_return_minvar: 0.001  # 10 bps for MinVar bullish assets
 
 # =============================================================================
 # EVALUATION CONFIGURATION
 # =============================================================================
 evaluation:
-  # Data splits (aligned with data configuration)
-  # Training:   1945-2000 (55 years) - learn long-term regime patterns
-  # Validation: 2001-2010 (10 years) - tune hyperparameters, select models
-  # Test:       2011-2025 (14 years) - final out-of-sample evaluation
-  
-  use_walk_forward: true  # Enable walk-forward validation
-  rebalance_frequency: monthly  # How often to rebalance portfolio
-  
-  # Cross-validation for hyperparameter tuning (on validation set)
-  cv_folds: 5
+  use_walk_forward: true        # Enable walk-forward validation
+  rebalance_frequency: daily    # Daily rebalancing
   
   # Performance metrics to calculate
   metrics:
-    - sharpe
-    - max_dd
-    - var_99
-    - calmar
-    - sortino
-    - omega
+    - excess_return
+    - excess_volatility
+    - sharpe_ratio
+    - max_drawdown
+    - calmar_ratio
+    - turnover
+    - average_leverage
+    - correlation
   
   # Benchmarks
   benchmarks:
-    - equal_weight  # Equal-weighted portfolio
-    - buy_hold      # Buy and hold each asset
-    - sp500         # S&P 500 only
+    - equal_weight
+    - buy_hold
+    - fix_mix_60_40
 
 # =============================================================================
 # OUTPUT CONFIGURATION
 # =============================================================================
 output:
-  # Directories
   figures_dir: output/figures
   models_dir: output/models
   results_dir: output/results
+  regime_stats_dir: output/regime_statistics
   
   # File names
   performance_file: performance_summary.csv
@@ -194,31 +215,24 @@ output:
   lambdas_file: optimal_lambdas.json
   
   # Figure settings
+  dpi: 300
+  format: png
+  
+  # Plot types to generate
   plot_types:
     - cumulative_returns
     - drawdown
-    - weights
+    - weights_allocation
     - regime_timeline
-    - feature_importance
-    - performance_summary
-  
-  dpi: 300  # Resolution for saved figures
-  format: png  # Figure format (png, pdf, svg)
-
-# =============================================================================
-# PERFORMANCE CONFIGURATION
-# =============================================================================
-performance:
-  use_numba: true  # Enable JIT compilation (faster)
-  use_cache: true  # Enable parquet caching
-  cache_compression: snappy  # Compression algorithm (snappy, gzip, brotli)
-  cache_size_mb: 1000  # Max cache size
+    - monthly_heatmap
+    - performance_comparison
+    - regime_drivers
 
 # =============================================================================
 # LOGGING CONFIGURATION
 # =============================================================================
 logging:
-  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  level: INFO
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   file: output/fioracle.log
   console: true
