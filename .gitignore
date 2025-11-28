@@ -82,6 +82,7 @@ data/cache/
 *.hdf5
 data_daily/
 
+
 # CRITICAL: API Credentials (NEVER COMMIT)
 config/lseg_config.yaml
 config/*_credentials.yaml
