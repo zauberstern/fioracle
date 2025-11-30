@@ -53,6 +53,24 @@ TUNE_LAMBDA = True
 TRAIN_FORECASTERS = True
 VERBOSE = True
 
+# =============================================================================
+# QUICK MODE - For fast sanity checks with smaller date ranges
+# =============================================================================
+# Set to True for quick test runs instead of full 80+ year backtest
+# Can also use: python main.py --quick
+QUICK_MODE = '--quick' in sys.argv
+
+# Quick mode date overrides (used when QUICK_MODE = True)
+# Extended dates for comprehensive analysis including all visualizations
+QUICK_DATES = {
+    'train_start': '1990-01-01',
+    'train_end': '2005-12-31',
+    'val_start': '2006-01-01',
+    'val_end': '2010-12-31',
+    'test_start': '2011-01-01',
+    'test_end': '2023-12-31',
+}
+
 
 def log_with_timestamp(message: str, level: str = 'INFO'):
     """Print message with timestamp."""
@@ -98,8 +116,22 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
     for dir_path in [figures_dir, results_dir, models_dir, regime_stats_dir]:
         dir_path.mkdir(parents=True, exist_ok=True)
     
+    # Apply QUICK_MODE date overrides if enabled
+    if QUICK_MODE:
+        log_with_timestamp("*** QUICK MODE ENABLED - Using shortened date ranges ***", 'WARNING')
+        config['data']['train_start'] = QUICK_DATES['train_start']
+        config['data']['train_end'] = QUICK_DATES['train_end']
+        config['data']['val_start'] = QUICK_DATES['val_start']
+        config['data']['val_end'] = QUICK_DATES['val_end']
+        config['data']['test_start'] = QUICK_DATES['test_start']
+        config['data']['test_end'] = QUICK_DATES['test_end']
+        config['data']['start_date'] = QUICK_DATES['train_start']
+        config['data']['end_date'] = QUICK_DATES['test_end']
+    
+    mode_label = "QUICK MODE" if QUICK_MODE else "FULL MODE"
+    
     print("\n" + "="*75)
-    print("Fioracle - Fixed Income Regime-Aware Portfolio Management")
+    print(f"Fioracle - Fixed Income Regime-Aware Portfolio Management ({mode_label})")
     print("="*75)
     print(f"Training Period:   {config['data']['train_start']} to {config['data']['train_end']}")
     print(f"Validation Period: {config['data']['val_start']} to {config['data']['val_end']}")
@@ -180,58 +212,67 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
     print("-" * 50)
     
     try:
-        # Extract risk-free rate
-        risk_free_col = [c for c in full_data.columns if 'risk_free' in c.lower()]
-        if not risk_free_col:
-            log_with_timestamp("No risk-free rate found, using zero", 'WARNING')
-            risk_free_rate = pd.Series(0.0, index=full_data.index)
+        # Extract risk-free rate from ANCILLARY data (NOT an investable asset!)
+        # RF data is a TOTAL RETURN INDEX (starts at 100), use pct_change() for daily returns
+        rf_col = [c for c in full_data.columns if 'ancillary_risk_free' in c.lower()]
+        if rf_col:
+            rf_index = full_data[rf_col[0]]
+            risk_free_rate = rf_index.pct_change()
+            # Forward-fill short gaps (weekends/holidays), don't assume 0 for missing data
+            risk_free_rate = risk_free_rate.ffill(limit=5)
+            rf_mean = risk_free_rate.dropna().mean()
+            log_with_timestamp(f"Using ancillary risk-free rate (mean daily: {rf_mean*100:.6f}%)")
         else:
-            risk_free_rate = full_data[risk_free_col[0]].pct_change()
+            log_with_timestamp("No risk-free rate found in ancillary data", 'WARNING')
+            risk_free_rate = pd.Series(dtype=float, index=full_data.index)  # NaN series, not zeros
         
-        # Build EXCLUDED list from config - these are NOT INVESTABLE
+        # Build EXCLUDED list from config
         excluded_assets = set()
         for excl in config['assets'].get('excluded', []):
-            # Normalize name: remove extensions, uppercase
-            excl_norm = excl.replace('.csv', '').replace('_TOTAL_RETURN', '').replace('_RETURN', '').upper()
-            excluded_assets.add(excl_norm)
-            # Also add full names
+            excl_clean = excl.replace('.csv', '').replace('_TOTAL_RETURN', '').replace('_RETURN', '').upper()
+            excluded_assets.add(excl_clean)
             excluded_assets.add(excl.replace('.csv', '').upper())
         
-        # Always exclude these non-investable assets
+        # NEVER include ancillary data as investable
         excluded_assets.update({
-            'SP500_TOTAL_RETURN', 'SP500',  # Equity - not fixed income
-            'US_RISK_FREE_RATE',            # Risk-free rate
-            'IBOXX_USD_LIQ_IG',             # Excluded per config
-            'IBOXX_USD_LIQ_HY',             # Excluded per config
+            'SP500_TOTAL_RETURN', 'SP500',
+            'US_RISK_FREE_RATE', 'RISK_FREE_RATE',
+            'YIELD_2Y', 'YIELD_SLOPE',
+            'ANCILLARY_SP500', 'ANCILLARY_RISK_FREE_RATE',
+            'ANCILLARY_YIELD_2Y', 'ANCILLARY_YIELD_SLOPE',
         })
         
-        log_with_timestamp(f"Excluded from investment: {sorted(excluded_assets)}")
+        log_with_timestamp(f"Excluded from portfolio: {sorted(excluded_assets)}")
         
-        # Build returns DataFrame (INVESTABLE ASSETS ONLY)
-        non_return_cols = {'asset_us_treasury_2y_yield', 'asset_us_10y2y_slope', 'asset_us_risk_free_rate'}
+        # Build returns DataFrame - ONLY asset_ columns (NOT ancillary_ or macro_)
         asset_returns = {}
         
         for col in full_data.columns:
-            if col.startswith('asset_') and col not in non_return_cols:
-                if col == risk_free_col[0] if risk_free_col else False:
-                    continue
-                asset_return = full_data[col].pct_change()
-                excess_return = asset_return - risk_free_rate
-                asset_name = col.replace('asset_', '').upper()
-                
-                # CRITICAL: Skip excluded assets
-                if asset_name in excluded_assets:
-                    continue
-                    
-                if asset_name in asset_features:
-                    asset_returns[asset_name] = excess_return
+            # Only process asset_ columns
+            if not col.startswith('asset_'):
+                continue
+            
+            # Use RAW returns (not excess) - RF subtraction happens in metrics
+            asset_return = full_data[col].pct_change()
+            
+            # Clean asset name
+            asset_name = col.replace('asset_', '').upper()
+            
+            # Skip excluded assets
+            if asset_name in excluded_assets:
+                continue
+            
+            # Only include if we have features for this asset
+            if asset_name in asset_features:
+                asset_returns[asset_name] = asset_return
         
         returns_df = pd.DataFrame(asset_returns)
         
         # Align with features
         common_idx = returns_df.index.intersection(macro_features.index)
         returns_df = returns_df.loc[common_idx]
-        risk_free_rate = risk_free_rate.reindex(common_idx).fillna(0.0)
+        # Align RF and forward-fill short gaps, but don't assume 0 for truly missing data
+        risk_free_rate = risk_free_rate.reindex(common_idx).ffill(limit=5)
         
         log_with_timestamp(f"Returns shape: {returns_df.shape}")
         log_with_timestamp(f"Assets: {list(returns_df.columns)[:5]}...")
@@ -298,7 +339,8 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
     regime_engine = RegimeEngine(
         lambda_jump=lambda_jump,
         n_macro_regimes=config['regimes']['hmm']['n_states'],
-        xgb_params=config['regimes'].get('xgboost', {})
+        xgb_params=config['regimes'].get('xgboost', {}),
+        config=config
     )
     
     training_regime_results = regime_engine.fit_identify_forecast(
@@ -318,26 +360,80 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
     print()
     
     # ========================================================================
-    # STEP 5: Evaluate on All Splits (Using Pre-Trained Models)
+    # STEP 5: Evaluate on All Splits
+    # For test split: use walk-forward validation if enabled
+    # For train/val: use pre-trained models
     # ========================================================================
     
+    # Check if walk-forward is enabled
+    walk_forward_enabled = config.get('regimes', {}).get('rolling', {}).get('enabled', False)
+    training_years = config.get('regimes', {}).get('rolling', {}).get('training_years', 11)
+    validation_years = config.get('regimes', {}).get('rolling', {}).get('validation_years', 5)
+    update_months = config.get('regimes', {}).get('rolling', {}).get('update_frequency_months', 6)
+    
     for split_name in SPLITS:
-        log_with_timestamp(f"STEP 5/6: Evaluating {split_name.upper()} Split (Out-of-Sample)")
+        log_with_timestamp(f"STEP 5/6: Evaluating {split_name.upper()} Split")
         print("-" * 50)
         
         try:
-            split_results = run_split_with_trained_model(
-                split_name=split_name,
-                config=config,
-                asset_features=asset_features,
-                macro_features=macro_features,
-                returns_df=returns_df,
-                risk_free_rate=risk_free_rate,
-                regime_engine=regime_engine,
-                trained_regimes_df=trained_regimes_df,
-                output_dir=output_dir,
-                excluded_assets=excluded_assets
-            )
+            # Use walk-forward for test split if enabled
+            if split_name == 'test' and walk_forward_enabled:
+                log_with_timestamp("Using WALK-FORWARD validation (biannual model updates)")
+                from core.regimes import rolling_regime_forecasting
+                
+                test_start = pd.Timestamp(config['data']['test_start'])
+                test_end = pd.Timestamp(config['data']['test_end'])
+                
+                # Run walk-forward regime forecasting
+                wf_forecasts, wf_probs, wf_lambdas = rolling_regime_forecasting(
+                    asset_features_dict=asset_features,
+                    asset_returns_df=returns_df,
+                    macro_features=macro_features,
+                    start_date=test_start,
+                    end_date=test_end,
+                    training_years=training_years,
+                    validation_years=validation_years,
+                    update_frequency_months=update_months,
+                    lambda_candidates=config['regimes']['jump_model']['lambda_candidates'],
+                    config=config,
+                    verbose=VERBOSE
+                )
+                
+                # Convert forecasts to DataFrame
+                wf_regimes_df = pd.DataFrame(wf_forecasts)
+                
+                log_with_timestamp(f"Walk-forward completed: {len(wf_lambdas)} updates")
+                
+                # Run portfolio optimization with walk-forward forecasts
+                split_results = run_split_with_trained_model(
+                    split_name=split_name,
+                    config=config,
+                    asset_features=asset_features,
+                    macro_features=macro_features,
+                    returns_df=returns_df,
+                    risk_free_rate=risk_free_rate,
+                    regime_engine=regime_engine,
+                    trained_regimes_df=wf_regimes_df,  # Use walk-forward forecasts
+                    output_dir=output_dir,
+                    excluded_assets=excluded_assets
+                )
+                
+                # Save walk-forward statistics
+                results['walk_forward_updates'] = wf_lambdas
+            else:
+                # Standard evaluation with pre-trained model
+                split_results = run_split_with_trained_model(
+                    split_name=split_name,
+                    config=config,
+                    asset_features=asset_features,
+                    macro_features=macro_features,
+                    returns_df=returns_df,
+                    risk_free_rate=risk_free_rate,
+                    regime_engine=regime_engine,
+                    trained_regimes_df=trained_regimes_df,
+                    output_dir=output_dir,
+                    excluded_assets=excluded_assets
+                )
             
             results[split_name] = split_results
             
@@ -368,6 +464,40 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
         log_with_timestamp(f"Regime drivers saved to {regime_analysis_dir}")
     except Exception as e:
         log_with_timestamp(f"Regime drivers visualization failed: {e}", 'WARNING')
+        traceback.print_exc()
+    
+    # ========================================================================
+    # STEP 6b: Generate Historical Time Series Visualization
+    # ========================================================================
+    
+    log_with_timestamp("Generating Historical Time Series Visualization")
+    
+    try:
+        from visualizations.historical_series import (
+            create_combined_timeseries_plot,
+            create_regime_prediction_timeline
+        )
+        
+        historical_dir = output_dir / 'figures' / 'historical'
+        historical_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Combined time series (asset returns + macro indicators)
+        create_combined_timeseries_plot(
+            output_dir=str(historical_dir),
+            start_date=config['data']['train_start'],
+            end_date=config['data']['test_end']
+        )
+        
+        # Regime prediction timeline (Jump Model vs XGBoost)
+        create_regime_prediction_timeline(
+            output_dir=str(historical_dir),
+            start_date=config['data']['train_start'],
+            end_date=config['data']['test_end']
+        )
+        
+        log_with_timestamp(f"Historical visualizations saved to {historical_dir}")
+    except Exception as e:
+        log_with_timestamp(f"Historical visualization failed: {e}", 'WARNING')
         traceback.print_exc()
     
     print()
@@ -567,7 +697,7 @@ def run_split_with_trained_model(
     log_with_timestamp("Running portfolio optimization...")
     
     # For portfolio: regime forecasts = current regimes shifted forward 1 day
-    regime_forecasts_df = regimes_df.shift(1).fillna(method='bfill')
+    regime_forecasts_df = regimes_df.shift(1).bfill()
     
     all_portfolio_results = {}
     
@@ -583,7 +713,8 @@ def run_split_with_trained_model(
                 max_weight=config['portfolio']['max_weight'],
                 covariance_halflife=config['portfolio'].get('covariance_halflife', 252),
                 lookback_years=TRAINING_YEARS,
-                strategy=strategy.upper()
+                strategy=strategy.upper(),
+                config=config
             )
             
             backtest_results = portfolio_engine.backtest(
@@ -592,7 +723,8 @@ def run_split_with_trained_model(
                 regime_forecasts_df=regime_forecasts_df,
                 start_date=start_ts,
                 end_date=end_ts,
-                verbose=True
+                verbose=True,
+                macro_features=split_macro  # For macro-conditioned mu in MV strategy
             )
             
             all_portfolio_results[strategy] = backtest_results
@@ -621,14 +753,22 @@ def run_split_with_trained_model(
         transaction_cost=config['portfolio']['transaction_cost']
     )
     
-    # Create benchmark: Equal-weight all available assets (EW Buy-and-Hold)
-    available_assets = [c for c in split_returns.columns if not split_returns[c].isna().all()]
-    if len(available_assets) >= 2:
-        benchmark_returns = split_returns[available_assets].mean(axis=1)
-        benchmark_name = f"EW {len(available_assets)}-Asset Buy-Hold"
+    # Build multiple benchmarks (EW + 60/40 + Barbell + Diversified Core)
+    from core.evaluation import build_all_benchmarks, generate_benchmark_comparison_report
+    benchmarks = build_all_benchmarks(split_returns, config)
+    
+    # Default benchmark for backward compatibility
+    if benchmarks:
+        primary_benchmark_name = list(benchmarks.keys())[0]
+        benchmark_returns = benchmarks[primary_benchmark_name]
+        benchmark_name = primary_benchmark_name
     else:
-        benchmark_returns = split_returns.mean(axis=1)
-        benchmark_name = "Buy-and-Hold"
+        available_assets = [c for c in split_returns.columns if not split_returns[c].isna().all()]
+        benchmark_returns = split_returns[available_assets].mean(axis=1) if len(available_assets) >= 2 else split_returns.mean(axis=1)
+        benchmark_name = "EW Buy-and-Hold"
+        benchmarks = {benchmark_name: benchmark_returns}
+    
+    log_with_timestamp(f"Benchmarks: {list(benchmarks.keys())}")
     
     all_metrics = {}
     
@@ -640,17 +780,25 @@ def run_split_with_trained_model(
             if len(portfolio_returns) == 0:
                 continue
             
-            metrics = evaluator.compute_portfolio_metrics(
-                portfolio_returns=portfolio_returns,
-                portfolio_weights=portfolio_weights,
-                benchmark_returns=benchmark_returns,
-                risk_free_rate=split_rf
-            )
+            # Evaluate against all benchmarks
+            strategy_metrics = {}
+            for bench_name, bench_rets in benchmarks.items():
+                metrics = evaluator.compute_portfolio_metrics(
+                    portfolio_returns=portfolio_returns,
+                    portfolio_weights=portfolio_weights,
+                    benchmark_returns=bench_rets,
+                    risk_free_rate=split_rf
+                )
+                strategy_metrics[bench_name] = metrics
             
-            all_metrics[strategy] = metrics
+            # Use primary benchmark for summary
+            metrics = strategy_metrics[primary_benchmark_name]
+            all_metrics[strategy] = {
+                'primary': metrics,
+                'all_benchmarks': strategy_metrics
+            }
             
             # Print key metrics
-            ann_ret_key = 'ann_excess_return' if 'ann_excess_return' in metrics else 'excess_return'
             log_with_timestamp(f"  {strategy.upper()}: Sharpe={metrics['sharpe_ratio']:.2f}, "
                              f"MDD={metrics['max_drawdown']*100:.1f}%, "
                              f"TotalRet={metrics['total_return']*100:.1f}%")
@@ -661,14 +809,28 @@ def run_split_with_trained_model(
                 json.dump({k: float(v) if isinstance(v, (int, float, np.floating)) else v 
                           for k, v in metrics.items()}, f, indent=2)
             
-            # Generate separate plots
+            # Generate benchmark comparison report
+            try:
+                generate_benchmark_comparison_report(
+                    portfolio_returns=portfolio_returns,
+                    portfolio_weights=portfolio_weights,
+                    benchmarks=benchmarks,
+                    strategy_name=f"{strategy.upper()} (JM-XGB)",
+                    save_dir=str(strategy_dir),
+                    risk_free_rate=split_rf
+                )
+            except Exception as e:
+                log_with_timestamp(f"Benchmark comparison failed: {e}", 'WARNING')
+            
+            # Generate separate plots (with all benchmarks)
             evaluator.generate_all_plots(
                 portfolio_returns=portfolio_returns,
                 portfolio_weights=portfolio_weights,
                 benchmark_returns=benchmark_returns,
                 benchmark_name=benchmark_name,
                 strategy_name=f"{strategy.upper()} (JM-XGB)",
-                save_dir=str(figures_dir / strategy)
+                save_dir=str(figures_dir / strategy),
+                all_benchmarks=benchmarks
             )
             
         except Exception as e:
@@ -677,9 +839,300 @@ def run_split_with_trained_model(
     
     split_results['metrics'] = all_metrics
     
+    # ========================================================================
+    # VIX Effectiveness Analysis
+    # ========================================================================
+    
+    log_with_timestamp("Running VIX effectiveness analysis...")
+    
+    try:
+        from visualizations.vix_analysis import analyze_vix_effectiveness
+        
+        # Get VIX data from macro features
+        vix_col = [c for c in split_macro.columns if 'vix' in c.lower()]
+        if vix_col and len(all_portfolio_results) > 0:
+            vix_data = split_macro[vix_col[0]]
+            
+            # Get best performing strategy based on total return
+            best_strategy = max(all_metrics.keys(), 
+                              key=lambda k: all_metrics[k]['primary'].get('total_return', 0)
+                              if isinstance(all_metrics[k], dict) and 'primary' in all_metrics[k] 
+                              else all_metrics[k].get('total_return', 0))
+            
+            backtest = all_portfolio_results[best_strategy]
+            
+            # Build dict of all strategy returns for VIX analysis
+            all_strategy_returns = {
+                k: v['portfolio_returns'] 
+                for k, v in all_portfolio_results.items()
+                if 'portfolio_returns' in v
+            }
+            
+            vix_results = analyze_vix_effectiveness(
+                portfolio_returns=backtest['portfolio_returns'],
+                benchmark_returns=benchmark_returns,
+                vix_data=vix_data,
+                weights_df=backtest['portfolio_weights'],
+                regimes_df=regimes_df,
+                output_dir=str(figures_dir / 'vix_analysis'),
+                strategy_name=f"{best_strategy.upper()} (JM-XGB)",
+                all_strategy_returns=all_strategy_returns
+            )
+            
+            split_results['vix_analysis'] = vix_results
+            log_with_timestamp("VIX analysis complete")
+        else:
+            log_with_timestamp("VIX data not available", 'WARNING')
+    except Exception as e:
+        log_with_timestamp(f"VIX analysis failed: {e}", 'WARNING')
+    
+    # ========================================================================
+    # XGBoost Diagnostics (SHAP, Feature Importance, Baselines)
+    # ========================================================================
+    
+    diag_cfg = config.get('regimes', {}).get('diagnostics', {})
+    if diag_cfg.get('enabled', False) and hasattr(regime_engine, 'classifiers'):
+        log_with_timestamp("Running XGBoost diagnostics...")
+        
+        try:
+            from core.diagnostics import (
+                run_full_diagnostics, save_diagnostics_summary, 
+                plot_feature_importance_comparison
+            )
+            
+            diag_dir = figures_dir / 'xgb_diagnostics'
+            diag_dir.mkdir(parents=True, exist_ok=True)
+            
+            all_diag_results = {}
+            
+            # Run diagnostics for each asset
+            for asset_name in split_asset_features.keys():
+                if asset_name not in regime_engine.classifiers:
+                    continue
+                
+                try:
+                    asset_feat = split_asset_features[asset_name]
+                    common_idx = asset_feat.index.intersection(split_macro.index)
+                    
+                    # Build feature matrix
+                    X_full = pd.DataFrame(index=common_idx)
+                    for col in asset_feat.columns:
+                        X_full[col] = asset_feat.loc[common_idx, col]
+                    for col in split_macro.columns:
+                        X_full[f'macro_{col}'] = split_macro.loc[common_idx, col]
+                    
+                    X_full = X_full.dropna()
+                    
+                    if len(X_full) < 100:
+                        continue
+                    
+                    # Get regimes
+                    if asset_name in regimes_df.columns:
+                        y_full = regimes_df[asset_name].reindex(X_full.index).dropna()
+                        X_full = X_full.loc[y_full.index]
+                    else:
+                        continue
+                    
+                    # Split
+                    split_point = int(len(X_full) * 0.8)
+                    X_train = X_full.iloc[:split_point]
+                    X_test = X_full.iloc[split_point:]
+                    y_train = y_full.iloc[:split_point]
+                    y_test = y_full.iloc[split_point:]
+                    
+                    # Get returns for conditional analysis
+                    if asset_name in split_returns.columns:
+                        asset_returns = split_returns[asset_name]
+                    else:
+                        asset_returns = pd.Series()
+                    
+                    diag_results = run_full_diagnostics(
+                        regime_engine=regime_engine,
+                        asset_name=asset_name,
+                        X_train=X_train,
+                        X_test=X_test,
+                        y_train=y_train,
+                        y_test=y_test,
+                        returns=asset_returns,
+                        output_dir=diag_dir,
+                        config=config
+                    )
+                    all_diag_results[asset_name] = diag_results
+                    
+                except Exception as e:
+                    log_with_timestamp(f"  Diagnostics for {asset_name} failed: {e}", 'WARNING')
+            
+            # Save aggregate results
+            if all_diag_results:
+                save_diagnostics_summary(all_diag_results, output_dir, split_name)
+                plot_feature_importance_comparison(all_diag_results, diag_dir)
+                split_results['xgb_diagnostics'] = all_diag_results
+                log_with_timestamp(f"  Diagnostics complete for {len(all_diag_results)} assets")
+            
+        except Exception as e:
+            log_with_timestamp(f"XGBoost diagnostics failed: {e}", 'WARNING')
+            traceback.print_exc()
+    
+    # ========================================================================
+    # Advanced Analytics (Fat Tails, Correlation Regimes)
+    # ========================================================================
+    
+    if config.get('regimes', {}).get('diagnostics', {}).get('enabled', False):
+        log_with_timestamp("Running advanced analytics...")
+        
+        try:
+            from visualizations.advanced_analytics import (
+                generate_fat_tail_analysis,
+                generate_correlation_regime_analysis,
+                generate_statistical_tests
+            )
+            
+            # Use best strategy for analysis
+            if all_metrics and all_portfolio_results:
+                best_strategy = max(all_metrics.keys(), 
+                                  key=lambda k: all_metrics[k].get('sharpe_ratio', 0) 
+                                  if isinstance(all_metrics[k], dict) else 0)
+                backtest = all_portfolio_results[best_strategy]
+                
+                analytics_dir = figures_dir / 'advanced_analytics'
+                analytics_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Fat tail analysis
+                fat_tail_results = generate_fat_tail_analysis(
+                    returns=backtest['portfolio_returns'],
+                    regimes=regimes_df.iloc[:, 0] if len(regimes_df.columns) > 0 else None,
+                    output_dir=str(analytics_dir),
+                    strategy_name=f"{best_strategy.upper()}"
+                )
+                split_results['fat_tail_analysis'] = fat_tail_results
+                
+                # Statistical tests vs benchmark
+                stat_tests = generate_statistical_tests(
+                    portfolio_returns=backtest['portfolio_returns'],
+                    benchmark_returns=benchmark_returns,
+                    output_dir=str(analytics_dir)
+                )
+                split_results['statistical_tests'] = stat_tests
+                
+                log_with_timestamp("Advanced analytics complete")
+        except Exception as e:
+            log_with_timestamp(f"Advanced analytics failed: {e}", 'WARNING')
+            traceback.print_exc()
+    
+    # ========================================================================
+    # Tail Hedge Analysis
+    # ========================================================================
+    
+    tail_hedge_cfg = config.get('portfolio', {}).get('tail_hedges', {})
+    if tail_hedge_cfg.get('enabled', False):
+        log_with_timestamp("Running tail hedge analysis...")
+        
+        try:
+            from visualizations.tail_hedge_analysis import analyze_tail_hedges
+            
+            if all_portfolio_results:
+                best_strategy = max(all_metrics.keys(), 
+                                  key=lambda k: all_metrics[k].get('sharpe_ratio', 0)
+                                  if isinstance(all_metrics[k], dict) else 0)
+                backtest = all_portfolio_results[best_strategy]
+                
+                tail_dir = figures_dir / 'tail_hedge'
+                tail_dir.mkdir(parents=True, exist_ok=True)
+                
+                tail_results = analyze_tail_hedges(
+                    portfolio_returns=backtest['portfolio_returns'],
+                    portfolio_weights=backtest['portfolio_weights'],
+                    asset_returns=split_returns,
+                    regime_series=regimes_df.iloc[:, 0] if len(regimes_df.columns) > 0 else None,
+                    config=config,
+                    output_dir=tail_dir,
+                    split_name=split_name
+                )
+                split_results['tail_hedge_analysis'] = tail_results
+                log_with_timestamp("Tail hedge analysis complete")
+        except Exception as e:
+            log_with_timestamp(f"Tail hedge analysis failed: {e}", 'WARNING')
+            traceback.print_exc()
+    
+    # ========================================================================
+    # Robustness Grid (if enabled)
+    # ========================================================================
+    
+    robustness_cfg = config.get('portfolio', {}).get('robustness_grid', {})
+    if robustness_cfg.get('enabled', False):
+        log_with_timestamp("Running robustness grid analysis...")
+        
+        try:
+            from visualizations.robustness_grid import evaluate_gamma_grid
+            
+            robustness_dir = figures_dir / 'robustness'
+            robustness_dir.mkdir(parents=True, exist_ok=True)
+            
+            robustness_results = evaluate_gamma_grid(
+                config=config,
+                returns_df=split_returns,
+                regime_forecasts_df=regimes_df,
+                macro_features=split_macro,
+                regimes_df=regimes_df,
+                split_name=split_name,
+                output_dir=robustness_dir,
+                risk_free_rate=split_rf
+            )
+            split_results['robustness_grid'] = robustness_results.to_dict() if robustness_results is not None else {}
+            log_with_timestamp("Robustness grid complete")
+        except Exception as e:
+            log_with_timestamp(f"Robustness grid failed: {e}", 'WARNING')
+            traceback.print_exc()
+    
     # Save summary
     with open(results_dir / 'strategy_comparison.json', 'w') as f:
         json.dump(all_metrics, f, indent=2, default=str)
+    
+    # ========================================================================
+    # Period-Specific Analysis (Supply Shock and Financial Crisis)
+    # ========================================================================
+    
+    if all_portfolio_results and split_name == 'test':
+        log_with_timestamp("Running period-specific analysis...")
+        
+        try:
+            from visualizations.period_analysis import (
+                generate_supply_shock_analysis,
+                generate_financial_crisis_analysis
+            )
+            
+            best_strategy = max(all_metrics.keys(), 
+                              key=lambda k: all_metrics[k]['primary'].get('sharpe_ratio', 0)
+                              if isinstance(all_metrics[k], dict) and 'primary' in all_metrics[k] else 0)
+            backtest = all_portfolio_results[best_strategy]
+            
+            # Supply shock analysis (2018-2022)
+            if pd.Timestamp('2018-01-01') >= split_returns.index.min():
+                supply_results = generate_supply_shock_analysis(
+                    portfolio_returns=backtest['portfolio_returns'],
+                    portfolio_weights=backtest['portfolio_weights'],
+                    benchmarks=benchmarks,  # Pass all benchmarks
+                    strategy_name=f"{best_strategy.upper()} (JM-XGB)",
+                    output_dir=figures_dir
+                )
+                split_results['supply_shock_analysis'] = supply_results
+                log_with_timestamp("Supply shock analysis complete")
+            
+            # Financial crisis analysis (2006-2010)
+            if pd.Timestamp('2006-01-01') >= split_returns.index.min():
+                crisis_results = generate_financial_crisis_analysis(
+                    portfolio_returns=backtest['portfolio_returns'],
+                    portfolio_weights=backtest['portfolio_weights'],
+                    benchmarks=benchmarks,  # Pass all benchmarks
+                    strategy_name=f"{best_strategy.upper()} (JM-XGB)",
+                    output_dir=figures_dir
+                )
+                split_results['financial_crisis_analysis'] = crisis_results
+                log_with_timestamp("Financial crisis analysis complete")
+                
+        except Exception as e:
+            log_with_timestamp(f"Period analysis failed: {e}", 'WARNING')
+            traceback.print_exc()
     
     return split_results
 

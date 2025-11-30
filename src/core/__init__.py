@@ -21,6 +21,7 @@ from .features import engineer_features
 from .regimes import RegimeEngine
 from .portfolio import PortfolioEngine
 from .evaluation import Evaluator
+from .benchmarks import BenchmarkEngine, build_all_benchmarks_enhanced
 
 __all__ = [
     # Utilities
@@ -43,6 +44,8 @@ __all__ = [
     'RegimeEngine',
     'PortfolioEngine',
     'Evaluator',
+    'BenchmarkEngine',
+    'build_all_benchmarks_enhanced',
 ]
 
 __version__ = '2.0.0'

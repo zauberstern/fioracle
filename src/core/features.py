@@ -1,20 +1,12 @@
 """
 Feature engineering for regime identification and forecasting.
 
-Two feature sets per methodology:
-1. Return Features (8 features) - For Jump Model regime identification
-   - Downside Deviation (log): halflives 5, 21 days
-   - Average Return: halflives 5, 10, 21 days
-   - Sortino Ratio: halflives 5, 10, 21 days
+Two feature sets:
+1. Return Features (8 features per asset) - For Jump Model
+2. Macro Features - Cross-asset features for XGBoost forecasting
 
-2. Macro Features (5 features) - Cross-asset features for XGBoost forecasting
-   - US Treasury 2Y Yield: diff and EWMA(hl=21)
-   - Yield Curve Slope: EWMA(hl=10) and diff EWMA(hl=21)
-   - VIX: log-diff and EWMA(hl=63)
-   - Stock-Bond Correlation: 252-day rolling
-
-Critical: LOG transform on downside deviation for stable fitting.
-Asset-specific: DD excluded for AggBond, Treasury, Gold in JM only.
+IMPORTANT: Uses ancillary data (RF rate, SP500, yields) for features
+but these are NEVER used in portfolio construction.
 """
 
 import pandas as pd
@@ -24,147 +16,111 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Columns that are not investable returns
-NON_RETURN_ASSET_COLUMNS = {
-    'asset_us_treasury_2y_yield',
-    'asset_us_10y2y_slope',
-    'asset_us_risk_free_rate',
-    'asset_dgs2',
-    'asset_t10y2y',
-}
-
-# Assets for which DD features should be excluded in JM (per paper methodology)
-DD_EXCLUSION_ASSETS = {
-    'US_BOND_AGG',
-    'US_10Y_GOV_BOND',
-    'GOLD',
-}
-
-# Feature halflives (trading days) per paper specification
-AVG_RETURN_HALFLIVES = [5, 10, 21]  # 1 week, 2 weeks, 1 month
-DD_HALFLIVES = [5, 21]  # 1 week, 1 month (only 2 to reduce correlation)
-SORTINO_HALFLIVES = [5, 10, 21]  # Same as avg return
+# Halflives for return features
+AVG_RETURN_HALFLIVES = [5, 10, 21]
+DD_HALFLIVES = [5, 21]
+SORTINO_HALFLIVES = [5, 10, 21]
 
 
 def engineer_features(
     raw_data: pd.DataFrame,
-    exclude_dd_for_jm: Optional[List[str]] = None
+    config: Optional[dict] = None
 ) -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
     """
     Engineer features from raw data.
     
-    Args:
-        raw_data: DataFrame with asset prices and macro indicators
-        exclude_dd_for_jm: List of assets to exclude DD features for JM
-        
     Returns:
         Tuple of (asset_features_dict, macro_features_df)
-        - asset_features_dict: {asset_name: DataFrame with 8 return features}
-        - macro_features_df: DataFrame with 5 cross-asset macro features
     """
     print("Engineering features...")
     
-    aligned = raw_data.copy()
+    # Get risk-free returns from ancillary data
+    rf_returns = _get_risk_free_returns(raw_data)
     
-    # Build excess returns for each asset
-    asset_returns = _construct_asset_returns(aligned)
+    # Build asset returns (investable assets ONLY)
+    asset_returns = _construct_asset_returns(raw_data, rf_returns)
     
-    # Compute asset-specific return features
+    # Compute asset-specific features
     asset_features = {}
     for asset_name, excess_returns in asset_returns.items():
-        # Check if DD should be excluded for this asset (for JM only)
-        exclude_dd = False
-        if exclude_dd_for_jm:
-            for pattern in exclude_dd_for_jm:
-                if pattern.upper() in asset_name.upper():
-                    exclude_dd = True
-                    break
-        
-        asset_features[asset_name] = compute_asset_features(excess_returns, exclude_dd=exclude_dd)
+        asset_features[asset_name] = compute_asset_features(excess_returns)
     
     print(f"  ✓ Computed features for {len(asset_features)} assets")
     
-    # Compute cross-asset macro features
-    macro_features = _compute_macro_features(aligned, asset_returns)
+    # Compute macro features (uses ancillary SP500, yields)
+    macro_features = _compute_macro_features(raw_data, asset_returns, config=config)
     
     print(f"  ✓ Computed {len(macro_features.columns)} macro features")
     
     return asset_features, macro_features
 
 
-def _construct_asset_returns(raw_data: pd.DataFrame) -> Dict[str, pd.Series]:
-    """Construct excess returns (vs risk-free) for each asset including SP500 for correlation."""
+def _get_risk_free_returns(raw_data: pd.DataFrame) -> pd.Series:
+    """Get risk-free rate returns from ancillary data."""
+    rf_col = [c for c in raw_data.columns if 'ancillary_risk_free' in c.lower()]
+    if rf_col:
+        rf_series = raw_data[rf_col[0]].pct_change()
+        # Forward-fill short gaps, but don't fill long periods of missing data
+        rf_series = rf_series.ffill(limit=5)
+        return rf_series
+    
+    # Fallback to NaN (not zero!) - this will propagate and be handled downstream
+    warnings.warn("Risk-free rate not found in ancillary data. Returns will be raw (not excess).")
+    return pd.Series(np.nan, index=raw_data.index)
+
+
+def _construct_asset_returns(raw_data: pd.DataFrame, rf_returns: pd.Series) -> Dict[str, pd.Series]:
+    """Construct excess returns for INVESTABLE assets only."""
     asset_returns = {}
     
-    risk_free_col = _detect_risk_free_series(raw_data.columns)
-    if risk_free_col is None:
-        warnings.warn("Risk-free series not found. Using zero risk-free rate.")
-        risk_free_returns = pd.Series(0.0, index=raw_data.index)
-    else:
-        risk_free_returns = raw_data[risk_free_col].pct_change()
+    # Check if RF is available (not all NaN)
+    rf_available = rf_returns.notna().any()
     
     for col in raw_data.columns:
+        # Only process asset_ columns (NOT ancillary_)
         if not col.startswith('asset_'):
-            continue
-        if col in NON_RETURN_ASSET_COLUMNS:
-            continue
-        if col == risk_free_col:
             continue
         
         asset_return = raw_data[col].pct_change()
-        excess_return = asset_return - risk_free_returns
+        
+        # Compute excess return only where both asset and RF are available
+        if rf_available:
+            # Align RF to asset's index and compute excess return
+            rf_aligned = rf_returns.reindex(asset_return.index)
+            excess_return = asset_return - rf_aligned.fillna(0.0)  # Use 0 only where RF unavailable
+        else:
+            # If no RF data at all, use raw returns (not excess)
+            excess_return = asset_return
+        
+        # Clean asset name
         asset_name = col.replace('asset_', '').upper()
         asset_returns[asset_name] = excess_return
-    
-    # SP500 is loaded separately (for stock-bond correlation) but not investable
-    # Include it in asset_returns for feature computation only
-    sp500_col = [c for c in raw_data.columns if 'sp500' in c.lower()]
-    if sp500_col and 'SP500_TOTAL_RETURN' not in asset_returns:
-        sp500_return = raw_data[sp500_col[0]].pct_change()
-        sp500_excess = sp500_return - risk_free_returns
-        asset_returns['SP500_TOTAL_RETURN'] = sp500_excess
     
     return asset_returns
 
 
-def compute_asset_features(
-    excess_returns: pd.Series,
-    exclude_dd: bool = False
-) -> pd.DataFrame:
-    """
-    Compute 8 return features for a single asset.
-    
-    Features (per paper Table 2):
-    1-2. Log Downside Deviation (hl=5, 21) - excluded for some assets
-    3-5. Average Return (hl=5, 10, 21)
-    6-8. Sortino Ratio (hl=5, 10, 21)
-    
-    Args:
-        excess_returns: Asset excess return series
-        exclude_dd: If True, exclude DD features (for AggBond, Treasury, Gold in JM)
-    """
+def compute_asset_features(excess_returns: pd.Series) -> pd.DataFrame:
+    """Compute 8 return features for a single asset."""
     features = pd.DataFrame(index=excess_returns.index, dtype=float)
     
-    # Compute average returns for all halflives
+    # Average returns
     avg_map = {}
     for hl in AVG_RETURN_HALFLIVES:
         avg = excess_returns.ewm(halflife=hl, min_periods=hl).mean()
         features[f'avg_return_hl{hl}'] = avg
         avg_map[hl] = avg
     
-    # Compute downside deviation for all needed halflives
-    required_dd_halflives = sorted(set(DD_HALFLIVES + SORTINO_HALFLIVES))
-    dd_map = {hl: _compute_downside_deviation(excess_returns, hl) for hl in required_dd_halflives}
+    # Downside deviation
+    required_halflives = sorted(set(DD_HALFLIVES + SORTINO_HALFLIVES))
+    dd_map = {hl: _compute_downside_deviation(excess_returns, hl) for hl in required_halflives}
     
-    # Add log DD features (unless excluded)
-    if not exclude_dd:
-        for hl in DD_HALFLIVES:
-            log_dd = np.log(dd_map[hl] + 1e-12)
-            features[f'log_dd_hl{hl}'] = log_dd
+    # Log DD features
+    for hl in DD_HALFLIVES:
+        log_dd = np.log(dd_map[hl] + 1e-12)
+        features[f'log_dd_hl{hl}'] = log_dd
     
-    # Compute Sortino ratios
+    # Sortino ratios
     for hl in SORTINO_HALFLIVES:
-        # Use appropriate avg_return halflife
         avg_hl = hl if hl in avg_map else min(avg_map.keys(), key=lambda x: abs(x - hl))
         sortino = avg_map[avg_hl] / (dd_map[hl] + 1e-12)
         features[f'sortino_hl{hl}'] = sortino.replace([np.inf, -np.inf], np.nan)
@@ -172,15 +128,8 @@ def compute_asset_features(
     return _standardize_features(features)
 
 
-def _compute_downside_deviation(
-    returns: pd.Series,
-    halflife: int,
-) -> pd.Series:
-    """
-    Compute exponentially weighted downside deviation.
-    
-    Downside deviation emphasizes downside risk (negative returns only).
-    """
+def _compute_downside_deviation(returns: pd.Series, halflife: int) -> pd.Series:
+    """Compute exponentially weighted downside deviation."""
     downside = returns.copy()
     downside[downside > 0] = 0
     squared = downside ** 2
@@ -188,98 +137,203 @@ def _compute_downside_deviation(
     return np.sqrt(ewm)
 
 
+def _apply_macro_lag(series: pd.Series, lag_days: int, enabled: bool) -> pd.Series:
+    """Shift data forward to prevent look-ahead bias from publication delays."""
+    if not enabled or lag_days is None or lag_days <= 0:
+        return series
+    return series.shift(lag_days)
+
+
 def _compute_macro_features(
     raw_data: pd.DataFrame,
     asset_returns: Dict[str, pd.Series],
+    config: Optional[dict] = None
 ) -> pd.DataFrame:
     """
-    Compute macro features based on available data.
+    Compute macro features from macro_universe and ancillary data.
     
-    Core Features (based on user's macro_universe):
-    1. VIX: log-diff and EWMA(hl=63) - market volatility
-    2. GPR: log-diff and EWMA(hl=21) - geopolitical risk
-    3. US Debt/GDP: level and diff - fiscal sustainability
-    
-    Optional Features (if yield data available):
-    4. Yield Curve Slope: level and changes
-    5. Stock-Bond Correlation: regime indicator
+    Includes VIX, GPR, Debt/GDP, HY OAS, inflation, yield curve, and stock-bond correlation.
+    Optionally applies publication lags to prevent look-ahead bias.
     """
     macro_features = pd.DataFrame(index=raw_data.index, dtype=float)
     
+    # Get macro lag configuration
+    macro_lags_cfg = (config or {}).get('macro_lags', {})
+    lags_enabled = macro_lags_cfg.get('enabled', False)
+    lag_vix = macro_lags_cfg.get('vix_days', 0)
+    lag_gpr = macro_lags_cfg.get('gpr_days', 0)
+    lag_epu = macro_lags_cfg.get('epu_days', 0)
+    lag_debt = macro_lags_cfg.get('debt_to_gdp_days', 0)
+    lag_infl = macro_lags_cfg.get('inflation_days', 0)
+    lag_gdp = macro_lags_cfg.get('gdp_growth_days', 0)
+    lag_unemp = macro_lags_cfg.get('unemployment_days', 0)
+    lag_hy = macro_lags_cfg.get('hy_oas_days', 0)
+    
     # ========================================================================
-    # CORE FEATURE 1: VIX - Market Volatility
+    # VIX - Market Volatility
     # ========================================================================
-    vix_col = _first_column_containing(raw_data, ['macro_vix', 'macro_cboe_vix', 'macro_synthesized_vix'])
-    if vix_col is not None:
-        vix_data = raw_data[vix_col]
-        # Log-diff with EWMA smoothing
+    vix_col = _find_column(raw_data, ['macro_vix', 'macro_synthesized_vix'])
+    if vix_col:
+        vix_data = _apply_macro_lag(raw_data[vix_col], lag_vix, lags_enabled)
+        # Forward-fill gaps up to 5 days for VIX (daily data)
+        vix_data = vix_data.ffill(limit=5)
         macro_features['vix_logdiff_ewma63'] = _ewm_logdiff(vix_data, halflife=63)
-        # Also include level (normalized)
         vix_level = vix_data.ewm(halflife=21, min_periods=21).mean()
-        macro_features['vix_level_ewma21'] = (vix_level - vix_level.mean()) / vix_level.std()
+        vix_std = vix_level.std()
+        if vix_std > 1e-10:
+            macro_features['vix_level_norm'] = (vix_level - vix_level.mean()) / vix_std
     
     # ========================================================================
-    # CORE FEATURE 2: GPR - Geopolitical Risk
+    # GPRI - Geopolitical Risk
     # ========================================================================
-    gpr_col = _first_column_containing(raw_data, ['macro_gpr', 'macro_gprd'])
-    if gpr_col is not None:
-        gpr_data = raw_data[gpr_col]
-        # Log-diff with EWMA smoothing
+    gpr_col = _find_column(raw_data, ['macro_gpri', 'macro_gpr'])
+    if gpr_col:
+        gpr_data = _apply_macro_lag(raw_data[gpr_col], lag_gpr, lags_enabled)
+        # Forward-fill gaps up to 7 days for GPR (may have weekends/holidays)
+        gpr_data = gpr_data.ffill(limit=7)
         macro_features['gpr_logdiff_ewma21'] = _ewm_logdiff(gpr_data, halflife=21)
-        # Also include level (normalized)
         gpr_level = gpr_data.ewm(halflife=21, min_periods=21).mean()
-        macro_features['gpr_level_ewma21'] = (gpr_level - gpr_level.mean()) / gpr_level.std()
+        gpr_std = gpr_level.std()
+        if gpr_std > 1e-10:
+            macro_features['gpr_level_norm'] = (gpr_level - gpr_level.mean()) / gpr_std
     
     # ========================================================================
-    # CORE FEATURE 3: US Debt to GDP - Fiscal Risk
+    # US Debt to GDP (quarterly data - forward-fill up to 90 days)
     # ========================================================================
-    debt_col = _first_column_containing(raw_data, ['macro_us_debt_to_gdp', 'macro_debt_gdp'])
-    if debt_col is not None:
-        debt_data = raw_data[debt_col]
-        # Level (normalized)
-        macro_features['debt_gdp_level'] = (debt_data - debt_data.mean()) / debt_data.std()
-        # Rate of change
+    debt_col = _find_column(raw_data, ['macro_us_debt_to_gdp'])
+    if debt_col:
+        debt_data = _apply_macro_lag(raw_data[debt_col], lag_debt, lags_enabled)
+        debt_data = debt_data.ffill(limit=90)  # Quarterly data
+        debt_std = debt_data.std()
+        if debt_std > 1e-10:
+            macro_features['debt_gdp_level'] = (debt_data - debt_data.mean()) / debt_std
         debt_diff = debt_data.diff()
         macro_features['debt_gdp_change_ewma63'] = debt_diff.ewm(halflife=63, min_periods=63).mean()
     
     # ========================================================================
-    # OPTIONAL: Yield Curve Features (if available)
+    # HY Corporate OAS (Credit Spreads)
     # ========================================================================
-    slope_col = _first_column_containing(raw_data, ['asset_us_10y2y_slope', 'asset_t10y2y'])
-    if slope_col is not None:
-        slope_series = raw_data[slope_col]
-        macro_features['slope_ewma10'] = slope_series.ewm(halflife=10, min_periods=10).mean()
-        slope_diff = slope_series.diff()
-        macro_features['slope_diff_ewma21'] = slope_diff.ewm(halflife=21, min_periods=21).mean()
-    
-    two_year_col = _first_column_containing(raw_data, ['asset_us_treasury_2y_yield', 'asset_dgs2'])
-    if two_year_col is not None:
-        two_year_diff = raw_data[two_year_col].diff()
-        macro_features['yield_2y_diff_ewma21'] = two_year_diff.ewm(halflife=21, min_periods=21).mean()
+    hy_col = _find_column(raw_data, ['macro_us_hy_corp_oas'])
+    if hy_col:
+        hy_data = _apply_macro_lag(raw_data[hy_col], lag_hy, lags_enabled)
+        hy_data = hy_data.ffill(limit=5)
+        hy_returns = hy_data.pct_change()
+        macro_features['hy_oas_return_ewma21'] = hy_returns.ewm(halflife=21, min_periods=21).mean()
+        hy_std = hy_data.std()
+        if hy_std > 1e-10:
+            macro_features['hy_oas_level_norm'] = (hy_data - hy_data.mean()) / hy_std
     
     # ========================================================================
-    # CORE FEATURE 4: Stock-Bond Correlation (key regime indicator)
+    # EPU - Economic Policy Uncertainty (monthly data - forward-fill up to 30 days)
     # ========================================================================
-    stock_col = _find_asset_column(asset_returns, ['SP500_TOTAL_RETURN', 'SP500'])
+    epu_col = _find_column(raw_data, ['macro_epu'])
+    if epu_col:
+        epu_data = _apply_macro_lag(raw_data[epu_col], lag_epu, lags_enabled)
+        epu_data = epu_data.ffill(limit=30)
+        macro_features['epu_logdiff_ewma21'] = _ewm_logdiff(epu_data, halflife=21)
+        epu_level = epu_data.ewm(halflife=21, min_periods=21).mean()
+        epu_std = epu_level.std()
+        if epu_std > 1e-10:
+            macro_features['epu_level_norm'] = (epu_level - epu_level.mean()) / epu_std
+    
+    # ========================================================================
+    # GDP Growth (quarterly data - forward-fill up to 90 days)
+    # ========================================================================
+    gdp_col = _find_column(raw_data, ['macro_us_gdp_growth'])
+    if gdp_col:
+        gdp_data = _apply_macro_lag(raw_data[gdp_col], lag_gdp, lags_enabled)
+        gdp_data = gdp_data.ffill(limit=90)
+        macro_features['gdp_growth_level'] = gdp_data / 100.0
+        gdp_ewm = gdp_data.ewm(halflife=63, min_periods=63).mean()
+        macro_features['gdp_growth_ewma63'] = gdp_ewm / 100.0
+    
+    # ========================================================================
+    # Unemployment Rate (monthly data - forward-fill up to 30 days)
+    # ========================================================================
+    unemp_col = _find_column(raw_data, ['macro_us_unemployment_rate'])
+    if unemp_col:
+        unemp_data = _apply_macro_lag(raw_data[unemp_col], lag_unemp, lags_enabled)
+        unemp_data = unemp_data.ffill(limit=30)
+        macro_features['unemployment_level'] = unemp_data / 100.0
+        unemp_diff = unemp_data.diff()
+        macro_features['unemployment_change_ewma21'] = unemp_diff.ewm(halflife=21, min_periods=21).mean()
+    
+    # ========================================================================
+    # US Inflation (monthly data - forward-fill up to 30 days)
+    # ========================================================================
+    infl_col = _find_column(raw_data, ['macro_us_inflation_rate', 'macro_us_inflation'])
+    if infl_col:
+        infl_data = _apply_macro_lag(raw_data[infl_col], lag_infl, lags_enabled)
+        infl_data = infl_data.ffill(limit=30)
+        # Inflation is already in % terms
+        macro_features['inflation_level'] = infl_data / 100.0
+        infl_diff = infl_data.diff()
+        macro_features['inflation_change_ewma21'] = infl_diff.ewm(halflife=21, min_periods=21).mean()
+    
+    # ========================================================================
+    # Yield Curve Features (from ancillary - daily, forward-fill weekends)
+    # ========================================================================
+    yield_2y_col = _find_column(raw_data, ['ancillary_yield_2y'])
+    slope_col = _find_column(raw_data, ['ancillary_yield_slope'])
+    
+    if yield_2y_col:
+        yield_2y = raw_data[yield_2y_col].ffill(limit=5)
+        yield_2y_diff = yield_2y.diff()
+        macro_features['yield_2y_diff_ewma21'] = yield_2y_diff.ewm(halflife=21, min_periods=21).mean()
+    
+    if slope_col:
+        slope = raw_data[slope_col].ffill(limit=5)
+        macro_features['yield_slope_ewma10'] = slope.ewm(halflife=10, min_periods=10).mean()
+        slope_diff = slope.diff()
+        macro_features['yield_slope_diff_ewma21'] = slope_diff.ewm(halflife=21, min_periods=21).mean()
+    
+    # ========================================================================
+    # Stock-Bond Correlation (uses ancillary SP500)
+    # ========================================================================
+    sp500_col = _find_column(raw_data, ['ancillary_sp500'])
     bond_col = _find_asset_column(asset_returns, ['US_BOND_AGG', 'IBOXX_USD_TREASURY', 'US_10Y_GOV_BOND'])
     
-    if stock_col and bond_col:
-        stock_returns = asset_returns[stock_col]
+    if sp500_col and bond_col:
+        sp500_returns = raw_data[sp500_col].pct_change()
         bond_returns = asset_returns[bond_col]
-        # Rolling 252-day correlation - key for understanding regime dynamics
-        macro_features['stock_bond_corr_252d'] = stock_returns.rolling(window=252, min_periods=126).corr(bond_returns)
-    elif len(asset_returns) >= 2 and bond_col:
-        # Fallback: correlation between bonds and another risky asset
-        other_assets = [k for k in asset_returns.keys() if k != bond_col and 'SP500' not in k.upper()]
-        if other_assets:
-            other_col = other_assets[0]
-            r1 = asset_returns[bond_col]
-            r2 = asset_returns[other_col]
-            macro_features['bond_asset_corr_252d'] = r1.rolling(window=252, min_periods=126).corr(r2)
+        # Align the series before computing correlation
+        common_idx = sp500_returns.dropna().index.intersection(bond_returns.dropna().index)
+        if len(common_idx) > 252:
+            sp500_aligned = sp500_returns.reindex(common_idx)
+            bond_aligned = bond_returns.reindex(common_idx)
+            corr = sp500_aligned.rolling(window=252, min_periods=126).corr(bond_aligned)
+            macro_features['stock_bond_corr_252d'] = corr.reindex(raw_data.index)
     
     # Clean up
     macro_features = macro_features.dropna(axis=1, how='all')
     return macro_features
+
+
+def _find_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    """Find first matching column."""
+    for name in candidates:
+        matches = [c for c in df.columns if name.lower() in c.lower()]
+        if matches:
+            return matches[0]
+    return None
+
+
+def _find_asset_column(asset_returns: Dict[str, pd.Series], candidates: List[str]) -> Optional[str]:
+    """Find matching asset."""
+    for name in candidates:
+        if name in asset_returns:
+            return name
+        for key in asset_returns.keys():
+            if name.upper() in key.upper():
+                return key
+    return None
+
+
+def _ewm_logdiff(series: pd.Series, halflife: int) -> pd.Series:
+    """Compute log-difference and EWM."""
+    clean = series.replace(0, np.nan)
+    log_diff = np.log(clean).diff()
+    return log_diff.ewm(halflife=halflife, min_periods=halflife).mean()
 
 
 def _standardize_features(features: pd.DataFrame) -> pd.DataFrame:
@@ -287,74 +341,16 @@ def _standardize_features(features: pd.DataFrame) -> pd.DataFrame:
     standardized = features.replace([np.inf, -np.inf], np.nan)
     means = standardized.mean(skipna=True)
     stds = standardized.std(skipna=True, ddof=0).replace(0, np.nan)
-    standardized = (standardized - means) / stds
-    return standardized
+    return (standardized - means) / stds
 
 
-def _ewm_logdiff(series: pd.Series, halflife: int) -> pd.Series:
-    """Compute log-difference and exponentially weighted moving average."""
-    clean = series.replace(0, np.nan)
-    log_diff = np.log(clean).diff()
-    return log_diff.ewm(halflife=halflife, min_periods=halflife).mean()
-
-
-def _first_column_containing(raw_data: pd.DataFrame, prefixes: List[str]) -> Optional[str]:
-    """Find first column matching any of the prefixes."""
-    for prefix in prefixes:
-        matches = [col for col in raw_data.columns if col.lower().startswith(prefix.lower())]
-        if matches:
-            return matches[0]
-    return None
-
-
-def _find_asset_column(asset_returns: Dict[str, pd.Series], candidates: List[str]) -> Optional[str]:
-    """Find matching asset from candidates list."""
-    for name in candidates:
-        if name in asset_returns:
-            return name
-        # Try partial match
-        for key in asset_returns.keys():
-            if name.upper() in key.upper():
-                return key
-    return None
-
-
-def _detect_risk_free_series(columns: List[str]) -> Optional[str]:
-    """Detect risk-free rate column."""
-    for col in columns:
-        if 'risk_free' in col.lower():
-            return col
-    return None
-
-
-def get_expanded_feature_set(
-    asset_features: pd.DataFrame,
-    macro_features: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Combine asset-specific and macro features for XGBoost forecasting.
-    
-    The expanded feature set includes all 8 return features (including DD
-    even for assets that excluded it in JM) plus all macro features.
-    
-    Args:
-        asset_features: DataFrame with asset-specific return features
-        macro_features: DataFrame with cross-asset macro features
-        
-    Returns:
-        Combined feature DataFrame
-    """
-    # Align indices
+def get_expanded_feature_set(asset_features: pd.DataFrame, macro_features: pd.DataFrame) -> pd.DataFrame:
+    """Combine asset and macro features for XGBoost."""
     common_idx = asset_features.index.intersection(macro_features.index)
     
     expanded = pd.DataFrame(index=common_idx)
-    
-    # Add all asset features
     for col in asset_features.columns:
-        if col in asset_features:
-            expanded[col] = asset_features.loc[common_idx, col]
-    
-    # Add all macro features
+        expanded[col] = asset_features.loc[common_idx, col]
     for col in macro_features.columns:
         expanded[col] = macro_features.loc[common_idx, col]
     
