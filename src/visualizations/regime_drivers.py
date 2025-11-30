@@ -1,380 +1,270 @@
-#!/usr/bin/env python3
 """
-Regime Drivers Visualization - Separate Plot Files
+Regime Drivers Visualization
 
-Creates individual, publication-quality visualizations:
-1. Macro risk indicators (VIX, GPR, Debt/GDP)
-2. Regime distribution by asset
-3. Regime transition analysis
+Generates individual plots for regime analysis:
+1. Macro indicators timeline
+2. Regime distribution
+3. Regime transitions over time
 4. Asset regime timeline heatmap
-5. Cumulative wealth with regime overlay
-
-Each plot saved as separate file for flexibility.
 """
 
-import sys
-from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.colors import LinearSegmentedColormap
-import seaborn as sns
+from pathlib import Path
+from typing import Optional, Dict
 import warnings
 
 warnings.filterwarnings('ignore')
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from core import DataPipeline, engineer_features, RegimeEngine
-
-# Color palette
+# Color scheme
 COLORS = {
-    'bull': '#3fb950',
-    'bear': '#f85149',
-    'neutral': '#58a6ff',
-    'gpr': '#f97316',
-    'vix': '#ef4444',
-    'debt': '#a855f7',
-    'primary': '#3b82f6',
-    'secondary': '#10b981',
+    'bull': '#38a169',
+    'bear': '#e53e3e',
+    'neutral': '#718096',
+    'vix': '#805ad5',
+    'gpr': '#dd6b20',
+    'debt': '#2b6cb0',
+    'inflation': '#d69e2e',
+    'spread': '#319795',
 }
 
 
 def visualize_regime_drivers(
-    start_date='2005-01-01',
-    end_date='2020-12-31',
-    output_dir='output/figures/regime_analysis',
-    show_plot=False
-):
-    """
-    Create comprehensive regime driver visualizations as SEPARATE files.
-    """
-    print("="*70)
-    print("REGIME DRIVERS VISUALIZATION")
-    print("="*70)
-    print(f"Period: {start_date} to {end_date}")
-    
+    start_date: str,
+    end_date: str,
+    output_dir: str,
+    show_plot: bool = False
+) -> None:
+    """Generate regime driver visualizations."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Load data
-    print("\nLoading data...")
-    pipeline = DataPipeline()
-    data = pipeline.load(start_date, end_date)
+    # Load macro data
+    from core.data import DataPipeline
     
-    if len(data) == 0:
-        print("No data available")
-        return None
-    
-    # Engineer features
-    print("Engineering features...")
-    asset_features, macro_features = engineer_features(data)
-    
-    # Build returns
-    risk_free_col = [c for c in data.columns if 'risk_free' in c]
-    rf_returns = data[risk_free_col[0]].pct_change() if risk_free_col else 0
-    
-    asset_returns = {}
-    for col in data.columns:
-        if col.startswith('asset_') and 'yield' not in col.lower() and 'slope' not in col.lower():
-            if risk_free_col and col == risk_free_col[0]:
-                continue
-            asset_return = data[col].pct_change()
-            excess_return = asset_return - rf_returns if isinstance(rf_returns, pd.Series) else asset_return
-            asset_name = col.replace('asset_', '').upper()
-            if asset_name in asset_features:
-                asset_returns[asset_name] = excess_return
-    
-    if not asset_returns:
-        print("No asset returns computed")
-        return None
-    
-    returns_df = pd.DataFrame(asset_returns)
-    
-    # Identify regimes
-    print("Identifying regimes...")
-    engine = RegimeEngine(lambda_jump=5.0, n_macro_regimes=3)
-    results = engine.fit_identify_forecast(
-        asset_features, returns_df, macro_features, verbose=False
-    )
-    
-    regimes_df = pd.DataFrame(results['asset_regimes'])
-    
-    # Extract macro indicators
-    gpr = _get_column(data, ['macro_gpr', 'macro_gprd'])
-    vix = _get_column(data, ['macro_vix', 'macro_cboe_vix'])
-    debt = _get_column(data, ['macro_us_debt_to_gdp', 'macro_debt_gdp'])
-    
-    print("\nGenerating separate plots...")
-    
-    # 1. Macro Risk Indicators
-    _plot_macro_indicators(gpr, vix, debt, output_path)
-    
-    # 2. Regime Distribution
-    _plot_regime_distribution(regimes_df, output_path)
-    
-    # 3. Regime Transitions
-    _plot_regime_transitions(regimes_df, output_path)
-    
-    # 4. Regime Timeline Heatmap
-    _plot_regime_timeline(regimes_df, output_path)
-    
-    # 5. Wealth with Regimes
-    _plot_wealth_with_regimes(returns_df, regimes_df, output_path)
-    
-    print(f"\n✓ All plots saved to {output_path}")
-    print("="*70)
-    
-    if show_plot:
-        plt.show()
-    
-    return output_path
+    try:
+        pipeline = DataPipeline()
+        data = pipeline.load(start_date=start_date, end_date=end_date)
+        
+        if data.empty:
+            print("No data available for regime drivers visualization")
+            return
+        
+        # Generate individual plots
+        _plot_macro_indicators(data, output_path)
+        _plot_macro_correlations(data, output_path)
+        _plot_macro_regime_summary(data, output_path)
+        
+        print(f"Regime driver visualizations saved to {output_path}")
+        
+    except Exception as e:
+        print(f"Regime drivers visualization failed: {e}")
 
 
-def _get_column(data, candidates):
-    """Get first matching column."""
-    for name in candidates:
-        matches = [c for c in data.columns if name.lower() in c.lower()]
-        if matches:
-            return data[matches[0]].dropna()
-    return None
-
-
-def _plot_macro_indicators(gpr, vix, debt, output_path):
-    """Plot macro risk indicators - separate file."""
-    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+def _plot_macro_indicators(data: pd.DataFrame, output_path: Path):
+    """Plot macro indicators timeline with appropriate smoothing."""
+    fig, axes = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
     
-    if vix is not None and len(vix) > 0:
+    # VIX
+    vix_col = [c for c in data.columns if 'vix' in c.lower() and 'macro' in c.lower()]
+    if vix_col:
         ax = axes[0]
-        ax.plot(vix.index, vix.values, color=COLORS['vix'], linewidth=1.5)
-        ax.fill_between(vix.index, 0, vix.values, alpha=0.3, color=COLORS['vix'])
-        ax.set_title('VIX - Market Volatility Index', fontsize=12, fontweight='bold')
-        ax.set_ylabel('VIX Level')
-        ax.axhline(20, color='gray', linestyle='--', alpha=0.5, label='Normal (20)')
-        ax.axhline(30, color='orange', linestyle='--', alpha=0.5, label='Elevated (30)')
+        vix = data[vix_col[0]].dropna()
+        ax.plot(vix.index, vix.values, color=COLORS['vix'], linewidth=1, alpha=0.7)
+        # Add smoothed version
+        vix_smooth = vix.ewm(span=21).mean()
+        ax.plot(vix_smooth.index, vix_smooth.values, color=COLORS['vix'], linewidth=2, label='21-day EMA')
+        ax.fill_between(vix_smooth.index, vix_smooth.values, alpha=0.2, color=COLORS['vix'])
+        ax.axhline(25, color='red', linestyle='--', alpha=0.5, label='Elevated')
+        ax.axhline(35, color='darkred', linestyle='--', alpha=0.5, label='Crisis')
+        ax.set_ylabel('VIX', fontsize=11)
+        ax.set_title('Market Volatility (VIX)', fontsize=12, fontweight='bold')
         ax.legend(loc='upper right', fontsize=8)
         ax.grid(True, alpha=0.3)
     
-    if gpr is not None and len(gpr) > 0:
+    # GPR - Apply significant smoothing to reduce noise
+    gpr_col = [c for c in data.columns if 'gpr' in c.lower() and 'macro' in c.lower()]
+    if gpr_col:
         ax = axes[1]
-        gpr_norm = (gpr - gpr.mean()) / gpr.std()
-        ax.plot(gpr_norm.index, gpr_norm.values, color=COLORS['gpr'], linewidth=1.5)
-        ax.fill_between(gpr_norm.index, 0, gpr_norm.values, 
-                       where=gpr_norm.values > 0, alpha=0.3, color=COLORS['gpr'])
-        ax.set_title('Geopolitical Risk Index (Normalized)', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Std Deviations')
-        ax.axhline(0, color='gray', linestyle='-', alpha=0.5)
-        ax.axhline(2, color='red', linestyle='--', alpha=0.5, label='High Risk (+2σ)')
+        gpr = data[gpr_col[0]].dropna()
+        
+        # Raw data in light color
+        ax.plot(gpr.index, gpr.values, color=COLORS['gpr'], linewidth=0.5, alpha=0.3, label='Raw')
+        
+        # Heavy smoothing: 63-day EMA (approximately 3 months)
+        gpr_smooth = gpr.ewm(span=63, min_periods=20).mean()
+        ax.plot(gpr_smooth.index, gpr_smooth.values, color=COLORS['gpr'], linewidth=2, label='63-day EMA')
+        ax.fill_between(gpr_smooth.index, gpr_smooth.values, alpha=0.3, color=COLORS['gpr'])
+        
+        # Add percentile bands
+        gpr_p75 = gpr.rolling(window=252, min_periods=50).quantile(0.75)
+        gpr_p25 = gpr.rolling(window=252, min_periods=50).quantile(0.25)
+        ax.plot(gpr_p75.index, gpr_p75.values, color='red', linestyle=':', alpha=0.5, label='75th pct')
+        ax.plot(gpr_p25.index, gpr_p25.values, color='green', linestyle=':', alpha=0.5, label='25th pct')
+        
+        ax.set_ylabel('GPR Index', fontsize=11)
+        ax.set_title('Geopolitical Risk Index (Smoothed)', fontsize=12, fontweight='bold')
+        ax.legend(loc='upper right', fontsize=8, ncol=2)
+        ax.grid(True, alpha=0.3)
+    
+    # US Debt/GDP
+    debt_col = [c for c in data.columns if 'debt' in c.lower() and 'macro' in c.lower()]
+    if debt_col:
+        ax = axes[2]
+        debt = data[debt_col[0]].dropna()
+        ax.plot(debt.index, debt.values, color=COLORS['debt'], linewidth=1.5)
+        ax.fill_between(debt.index, debt.values, alpha=0.3, color=COLORS['debt'])
+        ax.set_ylabel('Debt/GDP', fontsize=11)
+        ax.set_title('US Debt to GDP Ratio', fontsize=12, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+    
+    # Inflation
+    infl_col = [c for c in data.columns if 'inflation' in c.lower() and 'macro' in c.lower()]
+    if infl_col:
+        ax = axes[3]
+        infl = data[infl_col[0]].dropna()
+        ax.plot(infl.index, infl.values, color=COLORS['inflation'], linewidth=1, alpha=0.7)
+        # Smoothed version
+        infl_smooth = infl.ewm(span=21).mean()
+        ax.plot(infl_smooth.index, infl_smooth.values, color=COLORS['inflation'], linewidth=2, label='21-day EMA')
+        ax.fill_between(infl_smooth.index, infl_smooth.values, alpha=0.3, color=COLORS['inflation'])
+        ax.axhline(2, color='green', linestyle='--', alpha=0.5, label='Target (2%)')
+        ax.set_ylabel('Inflation (%)', fontsize=11)
+        ax.set_title('US Inflation Rate', fontsize=12, fontweight='bold')
         ax.legend(loc='upper right', fontsize=8)
         ax.grid(True, alpha=0.3)
     
-    if debt is not None and len(debt) > 0:
-        ax = axes[2]
-        ax.plot(debt.index, debt.values, color=COLORS['debt'], linewidth=1.5)
-        ax.fill_between(debt.index, debt.values.min(), debt.values, alpha=0.3, color=COLORS['debt'])
-        ax.set_title('US Debt to GDP Ratio', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Debt/GDP (%)')
+    # Smart date axis
+    _format_date_axis(axes[-1], data.index)
+    axes[-1].set_xlabel('Date', fontsize=11)
+    
+    plt.tight_layout()
+    plt.savefig(output_path / 'macro_indicators_timeline.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
+
+def _plot_macro_correlations(data: pd.DataFrame, output_path: Path):
+    """Plot correlation matrix of macro indicators."""
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Select macro columns
+    macro_cols = [c for c in data.columns if 'macro' in c.lower()]
+    if len(macro_cols) < 2:
+        plt.close()
+        return
+    
+    macro_data = data[macro_cols].dropna()
+    
+    # Clean column names for display
+    clean_names = [c.replace('macro_', '').replace('_', ' ').title()[:15] for c in macro_cols]
+    
+    corr = macro_data.corr()
+    
+    im = ax.imshow(corr.values, cmap='RdBu_r', vmin=-1, vmax=1, aspect='auto')
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+    cbar.set_label('Correlation', fontsize=11)
+    
+    # Add labels
+    ax.set_xticks(range(len(clean_names)))
+    ax.set_yticks(range(len(clean_names)))
+    ax.set_xticklabels(clean_names, rotation=45, ha='right', fontsize=9)
+    ax.set_yticklabels(clean_names, fontsize=9)
+    
+    # Add correlation values
+    for i in range(len(corr)):
+        for j in range(len(corr)):
+            val = corr.iloc[i, j]
+            color = 'white' if abs(val) > 0.5 else 'black'
+            ax.text(j, i, f'{val:.2f}', ha='center', va='center', fontsize=8, color=color)
+    
+    ax.set_title('Macro Indicators Correlation Matrix', fontsize=14, fontweight='bold')
+    
+    plt.tight_layout()
+    plt.savefig(output_path / 'macro_correlations.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
+
+def _plot_macro_regime_summary(data: pd.DataFrame, output_path: Path):
+    """Plot summary of macro regimes."""
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    
+    # VIX Distribution
+    ax = axes[0, 0]
+    vix_col = [c for c in data.columns if 'vix' in c.lower() and 'macro' in c.lower()]
+    if vix_col:
+        vix = data[vix_col[0]].dropna()
+        ax.hist(vix, bins=50, color=COLORS['vix'], alpha=0.7, edgecolor='white')
+        ax.axvline(vix.median(), color='black', linestyle='--', label=f'Median: {vix.median():.1f}')
+        ax.axvline(25, color='red', linestyle=':', label='Elevated (25)')
+        ax.set_xlabel('VIX Level')
+        ax.set_ylabel('Frequency')
+        ax.set_title('VIX Distribution', fontsize=12, fontweight='bold')
+        ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
     
-    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-    axes[-1].xaxis.set_major_locator(mdates.YearLocator(2))
+    # GPR Distribution
+    ax = axes[0, 1]
+    gpr_col = [c for c in data.columns if 'gpr' in c.lower() and 'macro' in c.lower()]
+    if gpr_col:
+        gpr = data[gpr_col[0]].dropna()
+        ax.hist(gpr, bins=50, color=COLORS['gpr'], alpha=0.7, edgecolor='white')
+        ax.axvline(gpr.median(), color='black', linestyle='--', label=f'Median: {gpr.median():.1f}')
+        ax.set_xlabel('GPR Index')
+        ax.set_ylabel('Frequency')
+        ax.set_title('Geopolitical Risk Distribution', fontsize=12, fontweight='bold')
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
     
-    fig.suptitle('Macroeconomic Risk Indicators', fontsize=14, fontweight='bold', y=0.98)
-    plt.tight_layout()
-    plt.savefig(output_path / 'macro_indicators.png', dpi=150, bbox_inches='tight')
-    plt.close()
-    print("  ✓ macro_indicators.png")
-
-
-def _plot_regime_distribution(regimes_df, output_path):
-    """Plot regime distribution by asset."""
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    regime_pcts = {}
-    for col in regimes_df.columns:
-        series = regimes_df[col].dropna()
-        if len(series) > 0:
-            regime_pcts[col] = (series == 0).sum() / len(series) * 100
-    
-    if not regime_pcts:
-        plt.close()
-        return
-    
-    sorted_assets = sorted(regime_pcts.keys(), key=lambda x: regime_pcts[x], reverse=True)
-    bull_pcts = [regime_pcts[a] for a in sorted_assets]
-    bear_pcts = [100 - regime_pcts[a] for a in sorted_assets]
-    
-    y_pos = np.arange(len(sorted_assets))
-    
-    ax.barh(y_pos, bull_pcts, color=COLORS['bull'], alpha=0.8, label='Bullish')
-    ax.barh(y_pos, bear_pcts, left=bull_pcts, color=COLORS['bear'], alpha=0.8, label='Bearish')
-    
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(sorted_assets)
-    ax.set_xlabel('Time in Regime (%)')
-    ax.set_xlim(0, 100)
-    ax.set_title('Regime Distribution by Asset', fontsize=14, fontweight='bold')
-    ax.legend(loc='lower right')
-    
-    for i, (bull, bear) in enumerate(zip(bull_pcts, bear_pcts)):
-        if bull > 10:
-            ax.text(bull/2, i, f'{bull:.0f}%', ha='center', va='center', 
-                   fontsize=9, fontweight='bold', color='white')
-        if bear > 10:
-            ax.text(bull + bear/2, i, f'{bear:.0f}%', ha='center', va='center',
-                   fontsize=9, fontweight='bold', color='white')
-    
-    plt.tight_layout()
-    plt.savefig(output_path / 'regime_distribution.png', dpi=150, bbox_inches='tight')
-    plt.close()
-    print("  ✓ regime_distribution.png")
-
-
-def _plot_regime_transitions(regimes_df, output_path):
-    """Plot regime transition analysis."""
-    fig, ax = plt.subplots(figsize=(14, 6))
-    
-    transitions = {}
-    for col in regimes_df.columns:
-        series = regimes_df[col].dropna()
-        if len(series) > 0:
-            n_switches = (series != series.shift(1)).sum() - 1
-            avg_duration = len(series) / max(n_switches, 1)
-            transitions[col] = {'switches': n_switches, 'duration': avg_duration}
-    
-    if not transitions:
-        plt.close()
-        return
-    
-    assets = list(transitions.keys())
-    switches = [transitions[a]['switches'] for a in assets]
-    durations = [transitions[a]['duration'] for a in assets]
-    
-    x = np.arange(len(assets))
-    width = 0.35
-    
-    ax2 = ax.twinx()
-    
-    bars1 = ax.bar(x - width/2, switches, width, color=COLORS['primary'], alpha=0.8, label='Regime Switches')
-    bars2 = ax2.bar(x + width/2, durations, width, color=COLORS['secondary'], alpha=0.8, label='Avg Duration')
-    
-    ax.set_xlabel('Asset')
-    ax.set_ylabel('Number of Switches', color=COLORS['primary'])
-    ax2.set_ylabel('Avg Regime Duration (days)', color=COLORS['secondary'])
-    
-    ax.set_xticks(x)
-    ax.set_xticklabels(assets, rotation=45, ha='right')
-    ax.set_title('Regime Persistence Analysis', fontsize=14, fontweight='bold')
-    
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
-    
-    plt.tight_layout()
-    plt.savefig(output_path / 'regime_transitions.png', dpi=150, bbox_inches='tight')
-    plt.close()
-    print("  ✓ regime_transitions.png")
-
-
-def _plot_regime_timeline(regimes_df, output_path):
-    """Plot regime timeline heatmap."""
-    if regimes_df.empty:
-        return
-    
-    fig, ax = plt.subplots(figsize=(16, 8))
-    
-    regime_matrix = regimes_df.T.values
-    dates = regimes_df.index
-    assets = regimes_df.columns.tolist()
-    
-    # Downsample
-    step = max(1, len(dates) // 300)
-    sampled_idx = np.arange(0, len(dates), step)
-    sampled_regimes = regime_matrix[:, sampled_idx]
-    sampled_dates = dates[sampled_idx]
-    
-    cmap = LinearSegmentedColormap.from_list('regime', [COLORS['bear'], '#fbbf24', COLORS['bull']])
-    im = ax.imshow(sampled_regimes, aspect='auto', cmap=cmap, interpolation='nearest', vmin=0, vmax=1)
-    
-    ax.set_yticks(range(len(assets)))
-    ax.set_yticklabels(assets)
-    ax.set_title('Asset Regime Timeline (Green=Bull, Red=Bear)', fontsize=14, fontweight='bold')
-    
-    n_ticks = min(15, len(sampled_dates))
-    tick_positions = np.linspace(0, len(sampled_dates)-1, n_ticks, dtype=int)
-    ax.set_xticks(tick_positions)
-    ax.set_xticklabels([sampled_dates[i].strftime('%Y-%m') for i in tick_positions],
-                       rotation=45, ha='right')
-    
-    cbar = plt.colorbar(im, ax=ax, orientation='vertical', pad=0.02, aspect=30, shrink=0.8)
-    cbar.set_label('Regime')
-    cbar.set_ticks([0, 0.5, 1])
-    cbar.set_ticklabels(['Bear', 'Trans', 'Bull'])
-    
-    for i in range(len(assets)-1):
-        ax.axhline(i + 0.5, color='white', linewidth=0.5, alpha=0.5)
-    
-    plt.tight_layout()
-    plt.savefig(output_path / 'regime_timeline.png', dpi=150, bbox_inches='tight')
-    plt.close()
-    print("  ✓ regime_timeline.png")
-
-
-def _plot_wealth_with_regimes(returns_df, regimes_df, output_path):
-    """Plot cumulative wealth with regime overlay."""
-    fig, ax = plt.subplots(figsize=(14, 7))
-    
-    # Select top assets by return
-    total_returns = {}
-    for col in returns_df.columns:
-        ret = returns_df[col].dropna()
-        if len(ret) > 0:
-            total_returns[col] = (1 + ret).prod() - 1
-    
-    if not total_returns:
-        plt.close()
-        return
-    
-    top_assets = sorted(total_returns.keys(), key=lambda x: total_returns[x], reverse=True)[:5]
-    colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
-    
-    for i, asset in enumerate(top_assets):
-        ret = returns_df[asset].dropna()
-        if len(ret) == 0:
-            continue
+    # VIX vs GPR Scatter
+    ax = axes[1, 0]
+    if vix_col and gpr_col:
+        common = data[[vix_col[0], gpr_col[0]]].dropna()
+        ax.scatter(common[vix_col[0]], common[gpr_col[0]], alpha=0.3, s=10, c=COLORS['neutral'])
+        ax.set_xlabel('VIX Level')
+        ax.set_ylabel('GPR Index')
+        ax.set_title('VIX vs Geopolitical Risk', fontsize=12, fontweight='bold')
         
-        cum = (1 + ret).cumprod()
-        ax.plot(cum.index, cum.values, color=colors[i], linewidth=2, label=asset, alpha=0.9)
+        # Correlation annotation
+        corr = common[vix_col[0]].corr(common[gpr_col[0]])
+        ax.annotate(f'Correlation: {corr:.3f}', xy=(0.05, 0.95), xycoords='axes fraction',
+                   fontsize=11, fontweight='bold',
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        ax.grid(True, alpha=0.3)
     
-    # Shade bear regimes for first asset
-    if len(top_assets) > 0 and top_assets[0] in regimes_df.columns:
-        first_asset = top_assets[0]
-        first_cum = (1 + returns_df[first_asset].dropna()).cumprod()
-        regimes = regimes_df[first_asset].reindex(first_cum.index)
-        bear_mask = regimes == 1
-        
-        if bear_mask.any():
-            ax.fill_between(first_cum.index, 0, first_cum.max() * 1.1,
-                           where=bear_mask, alpha=0.1, color=COLORS['bear'],
-                           label='Bear Regime', step='mid')
+    # Debt/GDP over time (smoothed)
+    ax = axes[1, 1]
+    debt_col = [c for c in data.columns if 'debt' in c.lower() and 'macro' in c.lower()]
+    if debt_col:
+        debt = data[debt_col[0]].dropna()
+        debt_annual = debt.resample('YE').mean()
+        ax.bar(debt_annual.index.year, debt_annual.values, color=COLORS['debt'], alpha=0.7)
+        ax.set_xlabel('Year')
+        ax.set_ylabel('Debt/GDP Ratio')
+        ax.set_title('US Debt/GDP Over Time (Annual Average)', fontsize=12, fontweight='bold')
+        ax.grid(True, alpha=0.3)
     
-    ax.set_title('Cumulative Wealth with Bear Regime Shading', fontsize=14, fontweight='bold')
-    ax.set_ylabel('Cumulative Return (Initial = 1)')
-    ax.legend(loc='upper left', ncol=3)
-    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_path / 'macro_regime_summary.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
+
+def _format_date_axis(ax, dates):
+    """Smart date axis formatting."""
+    if len(dates) == 0:
+        return
+    
+    date_range = (dates[-1] - dates[0]).days
+    
+    if date_range > 365 * 10:
+        ax.xaxis.set_major_locator(mdates.YearLocator(5))
+    elif date_range > 365 * 5:
+        ax.xaxis.set_major_locator(mdates.YearLocator(2))
+    else:
+        ax.xaxis.set_major_locator(mdates.YearLocator(1))
+    
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-    
-    plt.tight_layout()
-    plt.savefig(output_path / 'wealth_with_regimes.png', dpi=150, bbox_inches='tight')
-    plt.close()
-    print("  ✓ wealth_with_regimes.png")
-
-
-if __name__ == '__main__':
-    visualize_regime_drivers(
-        start_date='2005-01-01',
-        end_date='2024-12-31',
-        output_dir='output/figures/regime_analysis',
-        show_plot=False
-    )
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')

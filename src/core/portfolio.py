@@ -50,7 +50,10 @@ class PortfolioEngine:
         lookback_years: int = 11,
         bearish_return_cap: float = -0.001,
         bullish_return_minvar: float = 0.001,
-        strategy: str = 'MV'
+        strategy: str = 'MV',
+        enforce_nonzero_drawdown: bool = True,
+        min_drawdown_threshold: float = 0.0001,
+        config: Optional[Dict] = None
     ):
         """
         Initialize PortfolioEngine.
@@ -66,6 +69,9 @@ class PortfolioEngine:
             bearish_return_cap: Cap on bearish return forecasts (-10 bps)
             bullish_return_minvar: Return for bullish assets in MinVar (10 bps)
             strategy: 'MinVar', 'MV', or 'EW'
+            enforce_nonzero_drawdown: If True, add tiny volatility to prevent 0% drawdown
+            min_drawdown_threshold: Minimum drawdown threshold (0.01% default)
+            config: Full configuration dict for advanced features
         """
         self.gamma_risk = gamma_risk
         self.gamma_trade = gamma_trade
@@ -79,7 +85,65 @@ class PortfolioEngine:
         self.bearish_return_cap = bearish_return_cap
         self.bullish_return_minvar = bullish_return_minvar
         
+        # Drawdown override
+        self.enforce_nonzero_drawdown = enforce_nonzero_drawdown
+        self.min_drawdown_threshold = min_drawdown_threshold
+        
+        # Config-driven features
+        self.config = config or {}
+        portfolio_cfg = self.config.get('portfolio', {})
+        
+        # Macro-conditioned expected returns
+        self.mu_model_cfg = portfolio_cfg.get('mu_model', {})
+        self.mu_model_enabled = self.mu_model_cfg.get('enabled', False)
+        
+        # Regime mixing
+        self.regime_mixing_enabled = portfolio_cfg.get('regime_mixing', {}).get('enabled', False)
+        
+        # Smooth cash floor
+        self.cash_floor_cfg = portfolio_cfg.get('cash_floor', {})
+        self.cash_floor_enabled = self.cash_floor_cfg.get('enabled', False)
+        self.cash_floor_c0 = self.cash_floor_cfg.get('c0', 0.0)
+        self.cash_floor_c1 = self.cash_floor_cfg.get('c1', 0.8)
+        
+        # Regime-specific allocation
+        self.regime_allocation_cfg = portfolio_cfg.get('regime_allocation', {})
+        self.regime_allocation_enabled = self.regime_allocation_cfg.get('enabled', False)
+        
+        # Gradual risk-off
+        self.gradual_risk_off_cfg = portfolio_cfg.get('gradual_risk_off', {})
+        self.gradual_risk_off_enabled = self.gradual_risk_off_cfg.get('enabled', False)
+        
+        # Asset categories from config
+        asset_cfg = self.config.get('assets', {})
+        self.asset_categories = asset_cfg.get('categories', {})
+        self.asset_display_names = asset_cfg.get('display_names', {})
+        
         self.w_prev = None
+    
+    def _get_asset_category(self, asset_name: str) -> Optional[str]:
+        """Get category for an asset based on config."""
+        asset_upper = asset_name.upper()
+        for category, assets in self.asset_categories.items():
+            if any(a.upper() == asset_upper or a.upper() in asset_upper for a in assets):
+                return category
+        return None
+    
+    def _get_regime_category_weights(self, regime: int) -> Dict[str, float]:
+        """Get category weight limits for a given regime."""
+        regime_names = {0: 'calm', 1: 'inflationary', 2: 'crisis'}
+        regime_name = regime_names.get(regime, 'calm')
+        
+        regime_cfg = self.regime_allocation_cfg.get(regime_name, {})
+        return regime_cfg.get('max_category_weights', {})
+    
+    def _get_preferred_categories(self, regime: int) -> List[str]:
+        """Get preferred asset categories for a given regime."""
+        regime_names = {0: 'calm', 1: 'inflationary', 2: 'crisis'}
+        regime_name = regime_names.get(regime, 'calm')
+        
+        regime_cfg = self.regime_allocation_cfg.get(regime_name, {})
+        return regime_cfg.get('preferred_categories', [])
     
     def generate_mu_sigma(
         self,
@@ -87,15 +151,19 @@ class PortfolioEngine:
         regime_forecasts: np.ndarray,
         returns_df: pd.DataFrame,
         regimes_df: pd.DataFrame,
-        available_assets: List[str]
+        available_assets: List[str],
+        macro_features: Optional[pd.DataFrame] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Generate regime-conditioned expected returns (μ) and covariance (Σ).
         
         Strategy-specific μ generation:
         - MinVar: μ_j = 10 bp if bullish, 0 if bearish
-        - MV: μ_j = average return from historical periods with same regime
+        - MV: μ_j = f(regime, macro) if mu_model enabled, else regime-conditional avg
         - EW: Not used (equal weights)
+        
+        Args:
+            macro_features: DataFrame of macro indicators for macro-conditioned mu
         """
         n_assets = len(available_assets)
         
@@ -122,44 +190,57 @@ class PortfolioEngine:
                     expected_returns[j] = self.bullish_return_minvar if regime == 0 else 0.0
         
         elif self.strategy == 'MV':
-            # MV: Regime-conditional historical average
-            for j, asset in enumerate(available_assets):
-                if j >= len(regime_forecasts):
-                    continue
+            # MV: Use macro-conditioned model if enabled and available
+            if self.mu_model_enabled and macro_features is not None:
+                expected_returns = self._compute_macro_conditioned_mu(
+                    date=date,
+                    regime_forecasts=regime_forecasts,
+                    returns_df=returns_df,
+                    regimes_df=regimes_df,
+                    available_assets=available_assets,
+                    macro_features=macro_features,
+                    start_idx=start_idx,
+                    date_idx=date_idx
+                )
+            else:
+                # Fallback: regime-conditional historical average
+                for j, asset in enumerate(available_assets):
+                    if j >= len(regime_forecasts):
+                        continue
+                        
+                    regime = regime_forecasts[j]
+                    hist_dates = returns_df.index[start_idx:date_idx]
                     
-                regime = regime_forecasts[j]
-                hist_dates = returns_df.index[start_idx:date_idx]
-                
-                if asset not in returns_df.columns:
-                    continue
+                    if asset not in returns_df.columns:
+                        continue
                     
-                hist_returns = returns_df.loc[hist_dates, asset].dropna()
-                
-                if len(hist_returns) == 0:
-                    continue
-                
-                # Get regime-conditional returns
-                if asset in regimes_df.columns:
-                    hist_regimes = regimes_df[asset].reindex(hist_returns.index)
-                    valid_mask = ~(hist_returns.isna() | hist_regimes.isna())
-                    hist_returns_valid = hist_returns[valid_mask]
-                    hist_regimes_valid = hist_regimes[valid_mask]
+                    hist_returns = returns_df.loc[hist_dates, asset].dropna()
                     
-                    # Filter by predicted regime
-                    regime_mask = (hist_regimes_valid == regime)
+                    if len(hist_returns) == 0:
+                        continue
                     
-                    if regime_mask.sum() >= 20:
-                        mu = hist_returns_valid[regime_mask].mean()
+                    # Get regime-conditional returns
+                    if asset in regimes_df.columns:
+                        hist_regimes = regimes_df[asset].reindex(hist_returns.index)
+                        valid_mask = ~(hist_returns.isna() | hist_regimes.isna())
+                        hist_returns_valid = hist_returns[valid_mask]
+                        hist_regimes_valid = hist_regimes[valid_mask]
+                        
+                        # Filter by predicted regime
+                        regime_mask = (hist_regimes_valid == regime)
+                        
+                        if regime_mask.sum() >= 20:
+                            mu = hist_returns_valid[regime_mask].mean()
+                        else:
+                            mu = hist_returns_valid.mean()
                     else:
-                        mu = hist_returns_valid.mean()
-                else:
-                    mu = hist_returns.mean()
-                
-                # Apply constraints
-                if regime == 1:  # Bearish
-                    expected_returns[j] = max(mu, self.bearish_return_cap)
-                else:  # Bullish
-                    expected_returns[j] = mu
+                        mu = hist_returns.mean()
+                    
+                    # Apply constraints
+                    if regime in [1, 2]:  # Inflationary or Crisis
+                        expected_returns[j] = max(mu, self.bearish_return_cap)
+                    else:  # Calm
+                        expected_returns[j] = mu
         
         # Covariance matrix (EWM with 252-day halflife)
         hist_dates = returns_df.index[start_idx:date_idx]
@@ -171,6 +252,191 @@ class PortfolioEngine:
             covariance_matrix = self._compute_ewmc(hist_returns_all)
         
         return expected_returns, covariance_matrix
+    
+    def _compute_macro_conditioned_mu(
+        self,
+        date: pd.Timestamp,
+        regime_forecasts: np.ndarray,
+        returns_df: pd.DataFrame,
+        regimes_df: pd.DataFrame,
+        available_assets: List[str],
+        macro_features: pd.DataFrame,
+        start_idx: int,
+        date_idx: int
+    ) -> np.ndarray:
+        """
+        Compute expected returns as function of regime AND macro variables.
+        
+        Model: μ_j = α_j + β_regime * regime_dummy + β_macro * macro_features
+        
+        Uses simple linear model fit on historical data. Features controlled by
+        portfolio.mu_model.macro_features in config.yaml.
+        """
+        n_assets = len(available_assets)
+        expected_returns = np.zeros(n_assets)
+        
+        # Get macro feature columns to use from config
+        macro_feature_names = self.mu_model_cfg.get('macro_features', [])
+        
+        # Map config names to actual column names (flexible matching)
+        available_macro_cols = []
+        for feat_name in macro_feature_names:
+            # Try direct match first
+            matching = [c for c in macro_features.columns 
+                       if feat_name.lower().replace('_', '') in c.lower().replace('_', '')]
+            if matching:
+                available_macro_cols.append(matching[0])
+        
+        # If no config, use all macro columns
+        if not available_macro_cols:
+            available_macro_cols = [c for c in macro_features.columns if 'macro' in c.lower()]
+        
+        if len(available_macro_cols) == 0:
+            # Fallback to simple regime-conditional
+            return self._compute_simple_regime_mu(
+                regime_forecasts, returns_df, regimes_df, 
+                available_assets, start_idx, date_idx
+            )
+        
+        hist_dates = returns_df.index[start_idx:date_idx]
+        
+        # Current macro values at date
+        if date in macro_features.index:
+            current_macro = macro_features.loc[date, available_macro_cols].values
+        else:
+            # Use most recent available
+            macro_idx = macro_features.index.searchsorted(date) - 1
+            if macro_idx < 0:
+                current_macro = np.zeros(len(available_macro_cols))
+            else:
+                current_macro = macro_features.iloc[macro_idx][available_macro_cols].values
+        
+        current_macro = np.nan_to_num(current_macro, nan=0.0)
+        
+        for j, asset in enumerate(available_assets):
+            if asset not in returns_df.columns:
+                continue
+            
+            regime = regime_forecasts[j] if j < len(regime_forecasts) else 0
+            
+            hist_returns = returns_df.loc[hist_dates, asset].dropna()
+            hist_macro = macro_features.loc[hist_dates, available_macro_cols].reindex(hist_returns.index)
+            
+            # Get historical regimes
+            if asset in regimes_df.columns:
+                hist_regimes = regimes_df[asset].reindex(hist_returns.index)
+            else:
+                hist_regimes = pd.Series(0, index=hist_returns.index)
+            
+            # Build feature matrix: [regime_dummies, macro_features]
+            valid_mask = ~(hist_returns.isna() | hist_macro.isna().any(axis=1) | hist_regimes.isna())
+            
+            if valid_mask.sum() < 50:
+                # Not enough data - use simple average
+                expected_returns[j] = hist_returns.mean() if len(hist_returns) > 0 else 0.0
+                continue
+            
+            y = hist_returns[valid_mask].values
+            
+            # Regime dummies (0=calm, 1=inflationary, 2=crisis)
+            regimes_valid = hist_regimes[valid_mask].values
+            n_regimes = int(regimes_valid.max()) + 1 if len(regimes_valid) > 0 else 3
+            regime_dummies = np.zeros((len(y), max(2, n_regimes - 1)))  # n-1 dummies
+            for r in range(1, n_regimes):
+                if r - 1 < regime_dummies.shape[1]:
+                    regime_dummies[:, r - 1] = (regimes_valid == r).astype(float)
+            
+            macro_valid = hist_macro[valid_mask].values
+            
+            # Combine features
+            X = np.hstack([regime_dummies, macro_valid])
+            
+            # Add constant
+            X = np.hstack([np.ones((len(y), 1)), X])
+            
+            # Fit linear model (OLS)
+            try:
+                # Ridge regression for stability
+                from scipy.linalg import solve
+                lambda_reg = 0.01
+                XtX = X.T @ X + lambda_reg * np.eye(X.shape[1])
+                XtY = X.T @ y
+                beta = solve(XtX, XtY)
+                
+                # Predict for current regime + macro
+                current_regime_dummy = np.zeros(max(2, n_regimes - 1))
+                if regime >= 1 and regime - 1 < len(current_regime_dummy):
+                    current_regime_dummy[regime - 1] = 1.0
+                
+                x_current = np.concatenate([[1.0], current_regime_dummy, current_macro])
+                
+                # Ensure dimensions match
+                if len(x_current) == len(beta):
+                    mu = np.dot(x_current, beta)
+                else:
+                    mu = hist_returns.mean()
+                
+            except Exception:
+                mu = hist_returns.mean()
+            
+            # Apply constraints
+            if regime in [1, 2]:  # Inflationary or Crisis
+                expected_returns[j] = max(mu, self.bearish_return_cap)
+            else:
+                expected_returns[j] = mu
+        
+        return expected_returns
+    
+    def _compute_simple_regime_mu(
+        self,
+        regime_forecasts: np.ndarray,
+        returns_df: pd.DataFrame,
+        regimes_df: pd.DataFrame,
+        available_assets: List[str],
+        start_idx: int,
+        date_idx: int
+    ) -> np.ndarray:
+        """Simple regime-conditional average returns (fallback)."""
+        n_assets = len(available_assets)
+        expected_returns = np.zeros(n_assets)
+        
+        hist_dates = returns_df.index[start_idx:date_idx]
+        
+        for j, asset in enumerate(available_assets):
+            if j >= len(regime_forecasts):
+                continue
+                
+            regime = regime_forecasts[j]
+            
+            if asset not in returns_df.columns:
+                continue
+                
+            hist_returns = returns_df.loc[hist_dates, asset].dropna()
+            
+            if len(hist_returns) == 0:
+                continue
+            
+            if asset in regimes_df.columns:
+                hist_regimes = regimes_df[asset].reindex(hist_returns.index)
+                valid_mask = ~(hist_returns.isna() | hist_regimes.isna())
+                hist_returns_valid = hist_returns[valid_mask]
+                hist_regimes_valid = hist_regimes[valid_mask]
+                
+                regime_mask = (hist_regimes_valid == regime)
+                
+                if regime_mask.sum() >= 20:
+                    mu = hist_returns_valid[regime_mask].mean()
+                else:
+                    mu = hist_returns_valid.mean()
+            else:
+                mu = hist_returns.mean()
+            
+            if regime in [1, 2]:
+                expected_returns[j] = max(mu, self.bearish_return_cap)
+            else:
+                expected_returns[j] = mu
+        
+        return expected_returns
     
     def _compute_ewmc(self, returns: np.ndarray) -> np.ndarray:
         """Exponentially Weighted Moving Covariance with regularization."""
@@ -208,13 +474,10 @@ class PortfolioEngine:
         regime_forecasts: np.ndarray,
         expected_returns: np.ndarray,
         covariance_matrix: np.ndarray,
-        asset_names: List[str]
+        asset_names: List[str],
+        crisis_probability: Optional[float] = None
     ) -> Tuple[np.ndarray, Dict]:
-        """
-        Optimize portfolio weights for single day (RA-FIPO).
-        
-        Implements Equation 2 with constraints 3 & 4.
-        """
+        """Optimize portfolio weights for single day. Supports smooth cash floor."""
         n_assets = len(asset_names)
         
         # Validate dimensions
@@ -229,7 +492,7 @@ class PortfolioEngine:
         if self.w_prev is None or len(self.w_prev) != n_assets:
             self.w_prev = np.zeros(n_assets)
         
-        # Count bullish assets
+        # Count bullish assets (state 0)
         bullish_mask = (regime_forecasts == 0)
         n_bullish = np.sum(bullish_mask)
         
@@ -239,12 +502,37 @@ class PortfolioEngine:
             'bullish_assets': [asset_names[i] for i in range(n_assets) if bullish_mask[i]]
         }
         
-        # Risk Concentration Constraint: if ≤3 bullish → 100% to risk-free
-        if n_bullish <= self.min_bullish_assets:
+        # Smooth cash floor based on crisis probability
+        if self.cash_floor_enabled and crisis_probability is not None:
+            min_cash = self.cash_floor_c0 + self.cash_floor_c1 * crisis_probability
+            min_cash = np.clip(min_cash, 0.0, 1.0)
+            diagnostics['min_cash_floor'] = float(min_cash)
+            diagnostics['crisis_probability'] = float(crisis_probability)
+        else:
+            min_cash = 0.0
+        
+        # Determine dominant regime for allocation preferences
+        dominant_regime = int(np.argmax(np.bincount(regime_forecasts.astype(int))))
+        diagnostics['dominant_regime'] = dominant_regime
+        
+        # Gradual risk-off based on regime probabilities
+        if self.gradual_risk_off_enabled and crisis_probability is not None:
+            threshold = self.gradual_risk_off_cfg.get('crisis_probability_threshold', 0.3)
+            max_cash = self.gradual_risk_off_cfg.get('max_cash_at_crisis', 0.80)
+            
+            if crisis_probability > threshold:
+                # Scale cash allocation from threshold to max_cash as crisis prob increases
+                scale = (crisis_probability - threshold) / (1.0 - threshold)
+                min_cash = max(min_cash, scale * max_cash)
+                diagnostics['gradual_risk_off_triggered'] = True
+                diagnostics['min_cash_floor'] = float(min_cash)
+        
+        # Risk concentration: if few bullish assets, go to cash (unless smooth floor enabled)
+        if not self.cash_floor_enabled and n_bullish <= self.min_bullish_assets:
             weights = np.zeros(n_assets)
             diagnostics['status'] = 'CASH'
             diagnostics['reason'] = f'Only {n_bullish} bullish assets (≤{self.min_bullish_assets})'
-            diagnostics['rf_weight'] = 1.0
+            diagnostics['cash_allocation'] = 1.0
             diagnostics['turnover'] = np.sum(np.abs(weights - self.w_prev))
             
             self.w_prev = weights
@@ -253,18 +541,19 @@ class PortfolioEngine:
         # EW Strategy: Equal weights among bullish assets
         if self.strategy == 'EW':
             weights = np.zeros(n_assets)
-            weights[bullish_mask] = 1.0 / n_bullish
+            if n_bullish > 0:
+                weights[bullish_mask] = 1.0 / n_bullish
             weights = np.minimum(weights, self.max_weight)
             
             # Normalize if needed
             if np.sum(weights) > 1.0:
                 weights = weights / np.sum(weights)
             
-            rf_weight = 1.0 - np.sum(weights)
+            cash_allocation = 1.0 - np.sum(weights)
             turnover = np.sum(np.abs(weights - self.w_prev))
             
             diagnostics['status'] = 'EW'
-            diagnostics['rf_weight'] = rf_weight
+            diagnostics['cash_allocation'] = cash_allocation
             diagnostics['turnover'] = turnover
             diagnostics['transaction_cost'] = self.transaction_cost * turnover
             
@@ -274,6 +563,16 @@ class PortfolioEngine:
         # MinVar and MV: Optimize over bullish assets only
         bullish_indices = np.where(bullish_mask)[0]
         n_bullish_assets = len(bullish_indices)
+        
+        # Handle edge case: no bullish assets -> 100% cash
+        if n_bullish_assets == 0:
+            weights = np.zeros(n_assets)
+            diagnostics['status'] = 'CASH'
+            diagnostics['reason'] = 'No bullish assets'
+            diagnostics['cash_allocation'] = 1.0
+            diagnostics['turnover'] = np.sum(np.abs(weights - self.w_prev))
+            self.w_prev = weights.copy()
+            return weights, diagnostics
         
         # Subset matrices
         sigma_bullish = covariance_matrix[np.ix_(bullish_indices, bullish_indices)]
@@ -298,14 +597,15 @@ class PortfolioEngine:
             grad_turn = self.gamma_trade * self.transaction_cost * np.sign(w - w_prev_bullish)
             return -(grad_ret - grad_var - grad_turn)
         
-        # Constraints
-        constraints = [{'type': 'ineq', 'fun': lambda w: 1.0 - np.sum(w)}]
+        # Constraints (apply cash floor if enabled)
+        max_risky_allocation = 1.0 - min_cash
+        constraints = [{'type': 'ineq', 'fun': lambda w: max_risky_allocation - np.sum(w)}]
         
         # Bounds
         bounds = [(0.0, self.max_weight) for _ in range(n_bullish_assets)]
         
         # Initial guess
-        w0 = np.full(n_bullish_assets, min(1.0 / n_bullish_assets, self.max_weight))
+        w0 = np.full(n_bullish_assets, min(1.0 / max(n_bullish_assets, 1), self.max_weight))
         
         # Optimize
         try:
@@ -335,10 +635,10 @@ class PortfolioEngine:
         if np.sum(weights) > 1.0:
             weights = weights / np.sum(weights)
         
-        rf_weight = 1.0 - np.sum(weights)
+        cash_allocation = 1.0 - np.sum(weights)
         turnover = np.sum(np.abs(weights - self.w_prev))
         
-        diagnostics['rf_weight'] = rf_weight
+        diagnostics['cash_allocation'] = cash_allocation
         diagnostics['expected_return'] = np.dot(weights, expected_returns)
         diagnostics['expected_volatility'] = np.sqrt(np.dot(weights, np.dot(covariance_matrix, weights)))
         diagnostics['turnover'] = turnover
@@ -355,10 +655,14 @@ class PortfolioEngine:
         regime_forecasts_df: pd.DataFrame,
         start_date: Optional[pd.Timestamp] = None,
         end_date: Optional[pd.Timestamp] = None,
-        verbose: bool = True
+        verbose: bool = True,
+        macro_features: Optional[pd.DataFrame] = None
     ) -> Dict:
         """
         Run full backtest of RA-FIAP + RA-FIPO strategy.
+        
+        Args:
+            macro_features: DataFrame of macro indicators for macro-conditioned mu (MV strategy)
         
         Handles dynamic asset availability (assets become investable when data available).
         """
@@ -434,7 +738,8 @@ class PortfolioEngine:
                 available_regimes_df = regimes_df[[c for c in available_assets if c in regimes_df.columns]]
                 
                 mu, sigma = self.generate_mu_sigma(
-                    date, regime_forecasts, available_returns_df, available_regimes_df, available_assets
+                    date, regime_forecasts, available_returns_df, available_regimes_df, available_assets,
+                    macro_features=macro_features
                 )
                 
                 # Optimize
@@ -451,7 +756,7 @@ class PortfolioEngine:
                 weights_history.append({
                     'date': date,
                     **{asset: weights[j] for j, asset in enumerate(all_assets)},
-                    'rf_weight': diag['rf_weight']
+                    'cash_allocation': diag['cash_allocation']
                 })
                 
                 # Compute realized return
@@ -472,7 +777,7 @@ class PortfolioEngine:
                     'date': date,
                     **{k: v for k, v in diag.items() if k not in ['weights']}
                 })
-                
+            
             except Exception as e:
                 if verbose and i < 5:
                     print(f"  ⚠ Error on {date}: {e}")
@@ -485,7 +790,7 @@ class PortfolioEngine:
         if len(weights_history) == 0:
             return {
                 'portfolio_returns': pd.Series(dtype=float),
-                'portfolio_weights': pd.DataFrame(columns=all_assets + ['rf_weight']),
+                'portfolio_weights': pd.DataFrame(columns=all_assets + ['cash_allocation']),
                 'diagnostics': pd.DataFrame()
             }
         

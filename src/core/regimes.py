@@ -33,19 +33,27 @@ class JumpModel:
     """
     Statistical Jump Model for regime identification.
     
-    Solves optimization problem (Equation 1):
-    min_{Θ,S} Σ_{t=0}^{T-1} l(x_t, θ_{s_t}) + λ Σ_{t=1}^{T-1} 1_{s_{t-1} ≠ s_t}
+    Solves: min_{Θ,S} Σ l(x_t, θ_{s_t}) + λ Σ 1_{s_{t-1} ≠ s_t}
     
-    where:
-    - l(x,θ) = (1/2) ||x - θ||_2^2 (scaled squared L2 distance)
-    - λ is the jump penalty controlling regime persistence
-    - S is the state sequence (0=Bullish, 1=Bearish)
-    - Θ is the set of cluster centers
+    Supports 2-state (bull/bear) or 3-state (calm/inflationary/crisis) regimes
+    with optional L1 penalty for sparse centroids.
     """
     
-    def __init__(self, lambda_jump: float = 5.0, n_states: int = 2):
+    def __init__(
+        self, 
+        lambda_jump: float = 5.0, 
+        n_states: int = 2,
+        l1_penalty: float = 0.0
+    ):
+        """
+        Args:
+            lambda_jump: Jump penalty for regime transitions
+            n_states: Number of regimes (2 or 3)
+            l1_penalty: L1 penalty for sparse centroids
+        """
         self.lambda_jump = lambda_jump
         self.n_states = n_states
+        self.l1_penalty = l1_penalty
         self.theta = None  # Cluster centers
         self.X_mean = None
         self.X_std = None
@@ -82,7 +90,12 @@ class JumpModel:
             for k in range(K):
                 mask = (states == k)
                 if mask.sum() > 0:
-                    self.theta[k] = X_norm[mask].mean(axis=0)
+                    mu_k = X_norm[mask].mean(axis=0)
+                    # Apply L1 penalty (soft thresholding) for sparse centroids
+                    if self.l1_penalty > 0:
+                        self.theta[k] = np.sign(mu_k) * np.maximum(np.abs(mu_k) - self.l1_penalty, 0.0)
+                    else:
+                        self.theta[k] = mu_k
             
             # Step 2: Fix centers, find optimal state sequence via DP
             states = self._viterbi_dp(X_norm)
@@ -165,16 +178,32 @@ class RegimeEngine:
     - XGBoost for regime forecasting
     - Lambda tuning via 0/1 strategy Sharpe ratio
     - Output probability smoothing with halflife selection
+
+    
+    Supports 2-state (bull/bear) or 3-state (calm/inflationary/crisis) regimes
+    with regime probability output and optional sparse centroids.
     """
     
     def __init__(
         self,
         lambda_jump: float = 5.0,
         n_macro_regimes: int = 3,
-        xgb_params: Optional[Dict] = None
+        xgb_params: Optional[Dict] = None,
+        config: Optional[Dict] = None
     ):
         self.lambda_jump = lambda_jump
         self.n_macro_regimes = n_macro_regimes
+        self.config = config or {}
+        
+        # Read n_states and l1_penalty from config
+        jm_cfg = self.config.get('regimes', {}).get('jump_model', {})
+        self.n_states = jm_cfg.get('n_states', 2)  # Default 2 for backward compatibility
+        self.l1_penalty = jm_cfg.get('l1_penalty', 0.0)
+        self.regime_mixing_enabled = self.config.get('regimes', {}).get('regime_mixing', {}).get('enabled', False)
+        
+        # Regime labels for 3-state model
+        self.regime_labels = {0: 'calm', 1: 'inflationary', 2: 'crisis'}
+        
         self.xgb_params = xgb_params or {
             'max_depth': 5,
             'learning_rate': 0.1,
@@ -190,6 +219,7 @@ class RegimeEngine:
         self.classifiers = {}
         self.halflives = {}
         self.optimal_lambdas = {}
+        self.forecast_probabilities = {}  # Store probability vectors for regime mixing
         
     def fit_asset_regimes(
         self,
@@ -226,11 +256,21 @@ class RegimeEngine:
                 
                 if verbose:
                     n_switches = (regime_labels != regime_labels.shift(1)).sum() - 1
-                    bull_days = (regime_labels == 0).sum()
-                    bear_days = (regime_labels == 1).sum()
-                    print(f"{asset_name}: ✓ Bull={bull_days} ({bull_days/len(regime_labels)*100:.1f}%), "
-                          f"Bear={bear_days} ({bear_days/len(regime_labels)*100:.1f}%), "
-                          f"Switches={n_switches}")
+                    if self.n_states == 2:
+                        bull_days = (regime_labels == 0).sum()
+                        bear_days = (regime_labels == 1).sum()
+                        print(f"{asset_name}: ✓ Bull={bull_days} ({bull_days/len(regime_labels)*100:.1f}%), "
+                              f"Bear={bear_days} ({bear_days/len(regime_labels)*100:.1f}%), "
+                              f"Switches={n_switches}")
+                    else:
+                        # 3-state output
+                        calm = (regime_labels == 0).sum()
+                        infl = (regime_labels == 1).sum()
+                        crisis = (regime_labels == 2).sum()
+                        print(f"{asset_name}: ✓ Calm={calm} ({calm/len(regime_labels)*100:.1f}%), "
+                              f"Infl={infl} ({infl/len(regime_labels)*100:.1f}%), "
+                              f"Crisis={crisis} ({crisis/len(regime_labels)*100:.1f}%), "
+                              f"Switches={n_switches}")
             
             except Exception as e:
                 if verbose:
@@ -254,13 +294,20 @@ class RegimeEngine:
         
         X = features.values
         
-        # Fit Jump Model
-        jm = JumpModel(lambda_jump=self.lambda_jump, n_states=2)
+        # Use configured n_states and l1_penalty
+        jm = JumpModel(
+            lambda_jump=self.lambda_jump, 
+            n_states=self.n_states,
+            l1_penalty=self.l1_penalty
+        )
         states = jm.fit(X)
         
-        # Assign semantic labels
+        # Assign semantic labels based on n_states
         regime_labels = pd.Series(states, index=features.index)
-        regime_labels = self._assign_bull_bear_labels(regime_labels, returns)
+        if self.n_states == 2:
+            regime_labels = self._assign_bull_bear_labels(regime_labels, returns)
+        else:
+            regime_labels = self._assign_3state_labels(regime_labels, returns)
         
         return regime_labels, jm
     
@@ -285,6 +332,30 @@ class RegimeEngine:
         if bearish_state == 0:
             return 1 - states
         return states
+    
+    def _assign_3state_labels(
+        self,
+        states: pd.Series,
+        returns: pd.Series
+    ) -> pd.Series:
+        """Map 3 states to calm/inflationary/crisis based on mean returns."""
+        aligned_returns = returns.reindex(states.index)
+        
+        # Compute mean return per state
+        state_means = {}
+        for state in states.unique():
+            mask = (states == state)
+            state_means[state] = aligned_returns[mask].mean()
+        
+        # Sort states by mean return (descending)
+        sorted_states = sorted(state_means.keys(), key=lambda s: state_means[s], reverse=True)
+        
+        # Create mapping: highest return → 0 (calm), lowest → 2 (crisis)
+        remap = {}
+        for new_label, old_state in enumerate(sorted_states):
+            remap[old_state] = new_label
+        
+        return states.map(remap)
     
     def fit_forecasters(
         self,
@@ -332,12 +403,28 @@ class RegimeEngine:
                 X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
                 y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
                 
-                # Train XGBoost
-                model = self._train_xgboost(X_train, y_train, X_test, y_test)
+                # Remap classes to consecutive integers (handles missing classes)
+                unique_classes = sorted(y_train.unique())
+                if len(unique_classes) < 2:
+                    if verbose:
+                        print(f"{asset_name}: ✗ Only {len(unique_classes)} class(es) present")
+                    continue
                 
-                # Get probability predictions (probability of bullish = class 0)
-                p_train = model.predict_proba(X_train)[:, 0]
-                p_test = model.predict_proba(X_test)[:, 0]
+                class_map = {old: new for new, old in enumerate(unique_classes)}
+                class_map_inv = {new: old for old, new in class_map.items()}
+                y_train_mapped = y_train.map(class_map)
+                y_test_mapped = y_test.map(lambda x: class_map.get(x, 0))  # Map unseen to 0
+                
+                # Train XGBoost on mapped labels
+                model = self._train_xgboost(X_train, y_train_mapped, X_test, y_test_mapped)
+                
+                # Store mapping for predictions
+                self._class_maps = getattr(self, '_class_maps', {})
+                self._class_maps[asset_name] = class_map_inv
+                
+                # Get probability predictions
+                proba_train = model.predict_proba(X_train)
+                proba_test = model.predict_proba(X_test)
                 
                 # Select optimal halflife for smoothing
                 halflife_candidates = [0, 2, 4, 8]
@@ -347,19 +434,23 @@ class RegimeEngine:
                     returns = asset_returns_dict[asset_name].reindex(X_train.index)
                     best_sharpe = -np.inf
                     
+                    # For 3-state: use "favorable" probability (calm=0)
+                    # For 2-state: use bullish (0) probability
+                    p_favorable_train = proba_train[:, 0]
+                    
                     for halflife in halflife_candidates:
                         if halflife > 0:
                             alpha = 1 - np.exp(-np.log(2) / halflife)
-                            p_smooth = pd.Series(p_train, index=X_train.index).ewm(alpha=alpha, adjust=False).mean()
+                            p_smooth = pd.Series(p_favorable_train, index=X_train.index).ewm(alpha=alpha, adjust=False).mean()
                         else:
-                            p_smooth = pd.Series(p_train, index=X_train.index)
+                            p_smooth = pd.Series(p_favorable_train, index=X_train.index)
                         
-                        # Binary prediction with 0.5 threshold
-                        pred_regimes = (p_smooth < 0.5).astype(int)  # <0.5 bullish prob = bearish
+                        # Risk-off when favorable probability < 0.5
+                        risk_off = (p_smooth < 0.5).astype(int)
                         
                         # 0/1 Strategy returns
                         strategy_rets = returns.copy()
-                        strategy_rets[pred_regimes == 1] = 0.0  # Bearish → risk-free
+                        strategy_rets[risk_off == 1] = 0.0  # Risk-off → risk-free
                         
                         # Sharpe ratio
                         if strategy_rets.std() > 0:
@@ -368,20 +459,15 @@ class RegimeEngine:
                                 best_sharpe = sharpe
                                 optimal_halflife = halflife
                 
-                # Apply optimal smoothing
-                if optimal_halflife > 0:
-                    alpha = 1 - np.exp(-np.log(2) / optimal_halflife)
-                    p_test_smooth = pd.Series(p_test, index=X_test.index).ewm(alpha=alpha, adjust=False).mean()
-                else:
-                    p_test_smooth = pd.Series(p_test, index=X_test.index)
+                # Get predictions using argmax for multi-class
+                pred_test = np.argmax(proba_test, axis=1)
                 
-                # Binary predictions
-                pred_test = (p_test_smooth < 0.5).astype(int)
-                
-                # Evaluate
-                train_acc = accuracy_score(y_train, model.predict(X_train))
-                test_acc = accuracy_score(y_test, pred_test)
-                test_f1 = f1_score(y_test, pred_test, zero_division=0)
+                # Evaluate using mapped labels
+                train_acc = accuracy_score(y_train_mapped, model.predict(X_train))
+                test_acc = accuracy_score(y_test_mapped, pred_test)
+                n_classes_present = len(unique_classes)
+                avg = 'weighted' if n_classes_present > 2 else 'binary'
+                test_f1 = f1_score(y_test_mapped, pred_test, average=avg, zero_division=0)
                 
                 # Feature importance
                 importance = pd.DataFrame({
@@ -420,11 +506,7 @@ class RegimeEngine:
         asset_regimes: pd.Series,
         macro_features: pd.DataFrame
     ) -> Tuple[pd.DataFrame, pd.Series]:
-        """
-        Prepare supervised dataset for XGBoost.
-        
-        Target: regime shifted forward by one day (predict s_{t+1} from x_t)
-        """
+        """Prepare supervised dataset for XGBoost with configurable forecast horizon."""
         # Align all data
         common_idx = asset_features.index.intersection(asset_regimes.index)
         common_idx = common_idx.intersection(macro_features.index)
@@ -437,12 +519,25 @@ class RegimeEngine:
         for col in macro_features.columns:
             X[f'macro_{col}'] = macro_features.loc[common_idx, col]
         
-        # Target: shifted forward by one day
-        y = asset_regimes.loc[common_idx].shift(-1)
+        # Get forecast horizon from config
+        horizon_cfg = self.config.get('regimes', {}).get('xgboost', {}).get('forecast_horizon', {})
+        horizon_days = horizon_cfg.get('horizon_days', 1)
+        mode = horizon_cfg.get('mode', 'shift')
         
-        # Drop last row and NaN
-        X = X.iloc[:-1]
-        y = y.iloc[:-1]
+        # Target: shifted forward by horizon
+        if mode == 'shift':
+            y = asset_regimes.loc[common_idx].shift(-horizon_days)
+        elif mode == 'window_majority':
+            # Most frequent regime in next horizon_days
+            y = asset_regimes.loc[common_idx].rolling(window=horizon_days).apply(
+                lambda x: x.mode()[0] if len(x.mode()) > 0 else x.iloc[0], raw=False
+            ).shift(-horizon_days)
+        else:
+            y = asset_regimes.loc[common_idx].shift(-horizon_days)
+        
+        # Drop rows with NaN
+        X = X.iloc[:-horizon_days]
+        y = y.iloc[:-horizon_days]
         valid = ~(X.isna().any(axis=1) | y.isna())
         
         return X[valid], y[valid]
@@ -454,17 +549,28 @@ class RegimeEngine:
         X_test: pd.DataFrame,
         y_test: pd.Series
     ) -> xgb.XGBClassifier:
-        """Train XGBoost classifier with class balancing."""
-        n_pos = (y_train == 1).sum()
-        n_neg = (y_train == 0).sum()
+        """Train XGBoost classifier with class balancing. Supports multi-class."""
+        n_classes = len(y_train.unique())
         
-        if n_pos == 0 or n_neg == 0:
+        if n_classes < 2:
+            n_pos = (y_train == 1).sum()
+            n_neg = (y_train == 0).sum()
             raise ValueError(f"Only one class present: pos={n_pos}, neg={n_neg}")
         
         params = self.xgb_params.copy()
-        params['scale_pos_weight'] = n_neg / n_pos
-        params['objective'] = 'binary:logistic'
-        params['eval_metric'] = 'logloss'
+        
+        # Multi-class support
+        if n_classes == 2:
+            n_pos = (y_train == 1).sum()
+            n_neg = (y_train == 0).sum()
+            params['scale_pos_weight'] = n_neg / n_pos
+            params['objective'] = 'binary:logistic'
+            params['eval_metric'] = 'logloss'
+        else:
+            params['objective'] = 'multi:softprob'
+            params['num_class'] = n_classes
+            params['eval_metric'] = 'mlogloss'  # Use mlogloss for multi-class
+            params.pop('scale_pos_weight', None)
         
         model = xgb.XGBClassifier(**params)
         model.fit(
@@ -505,7 +611,7 @@ class RegimeEngine:
         for lam in lambda_candidates:
             try:
                 # Fit JM with this lambda
-                jm = JumpModel(lambda_jump=lam, n_states=2)
+                jm = JumpModel(lambda_jump=lam, n_states=self.n_states, l1_penalty=self.l1_penalty)
                 states = jm.fit(features.values)
                 
                 # Assign bull/bear labels
@@ -592,13 +698,12 @@ class RegimeEngine:
         self,
         asset_name: str,
         current_features: pd.Series,
-        previous_prob: Optional[float] = None
-    ) -> Tuple[int, float]:
+        previous_prob: Optional[np.ndarray] = None
+    ) -> Tuple[int, np.ndarray]:
         """
         Forecast next-day regime for an asset.
         
-        Applies exponential smoothing if halflife > 0.
-        Decision rule: probability threshold of 0.5.
+        Returns predicted state (in original label space) and probability vector.
         """
         if asset_name not in self.classifiers:
             raise ValueError(f"No classifier trained for {asset_name}")
@@ -606,21 +711,25 @@ class RegimeEngine:
         model = self.classifiers[asset_name]
         X = current_features.values.reshape(1, -1)
         
-        # Get probability of bullish regime (class 0)
-        prob_raw = model.predict_proba(X)[0, 0]
+        # Get full probability vector
+        prob_raw = model.predict_proba(X)[0]  # Shape: (n_classes,)
         
-        # Apply exponential smoothing
+        # Apply exponential smoothing to probability vector
         halflife = self.halflives.get(asset_name, 0)
-        if halflife > 0 and previous_prob is not None:
+        if halflife > 0 and previous_prob is not None and len(previous_prob) == len(prob_raw):
             alpha = 1 - np.exp(-np.log(2) / halflife)
             prob_smooth = alpha * prob_raw + (1 - alpha) * previous_prob
         else:
             prob_smooth = prob_raw
         
-        # Binary prediction (0.5 threshold)
-        pred = 0 if prob_smooth >= 0.5 else 1
+        # Prediction: argmax of probabilities (in mapped space)
+        pred_mapped = int(np.argmax(prob_smooth))
         
-        return int(pred), float(prob_smooth)
+        # Map back to original label space
+        class_map_inv = getattr(self, '_class_maps', {}).get(asset_name, {})
+        pred = class_map_inv.get(pred_mapped, pred_mapped)
+        
+        return pred, prob_smooth
 
 
 def rolling_regime_forecasting(
@@ -633,8 +742,9 @@ def rolling_regime_forecasting(
     validation_years: int = 5,
     update_frequency_months: int = 6,
     lambda_candidates: Optional[List[float]] = None,
+    config: Optional[Dict] = None,
     verbose: bool = True
-) -> Tuple[Dict[str, pd.Series], Dict[str, float]]:
+) -> Tuple[Dict[str, pd.Series], Dict[str, pd.DataFrame], Dict[str, float]]:
     """
     Rolling time-series framework with biannual updates (Algorithm 1).
     
@@ -651,6 +761,7 @@ def rolling_regime_forecasting(
         lambda_candidates = [0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
     
     forecasts = {asset: pd.Series(dtype=float) for asset in asset_features_dict.keys()}
+    forecast_probs = {asset: pd.DataFrame() for asset in asset_features_dict.keys()}  # Track probabilities
     all_optimal_lambdas = {}
     
     current_date = start_date
@@ -694,7 +805,7 @@ def rolling_regime_forecasting(
             if asset_name not in returns_data.columns:
                 continue
                 
-            engine = RegimeEngine(lambda_jump=5.0)
+            engine = RegimeEngine(lambda_jump=5.0, config=config)
             val_features = train_features[asset_name].loc[val_start:val_end]
             val_returns = returns_data[asset_name].loc[val_start:val_end]
             
@@ -724,7 +835,7 @@ def rolling_regime_forecasting(
                 single_returns = returns_data[[asset_name]].copy()
                 single_returns.columns = [asset_name]
                 
-                engine = RegimeEngine(lambda_jump=update_lambdas[asset_name])
+                engine = RegimeEngine(lambda_jump=update_lambdas[asset_name], config=config)
                 results = engine.fit_identify_forecast(
                     single_features, single_returns, macro_train,
                     train_forecasters=True, verbose=False
@@ -760,7 +871,9 @@ def rolling_regime_forecasting(
                         asset_forecasts.append(np.nan)
                 
                 forecast_series = pd.Series(asset_forecasts, index=common_idx)
-                forecasts[asset_name] = pd.concat([forecasts[asset_name], forecast_series])
+                combined_forecasts = pd.concat([forecasts[asset_name], forecast_series])
+                # Remove duplicates, keeping the latest forecast
+                forecasts[asset_name] = combined_forecasts[~combined_forecasts.index.duplicated(keep='last')]
                 
             except Exception as e:
                 if verbose:
@@ -768,9 +881,15 @@ def rolling_regime_forecasting(
         
         current_date = update_end
     
+    # Final cleanup: ensure no duplicates in any series
+    for asset_name in forecasts:
+        if len(forecasts[asset_name]) > 0:
+            forecasts[asset_name] = forecasts[asset_name][~forecasts[asset_name].index.duplicated(keep='last')]
+            forecasts[asset_name] = forecasts[asset_name].sort_index()
+    
     if verbose:
         print(f"\n{'='*60}")
         print(f"Completed {update_count} rolling updates")
         print(f"{'='*60}\n")
     
-    return forecasts, all_optimal_lambdas
+    return forecasts, forecast_probs, all_optimal_lambdas
