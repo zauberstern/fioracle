@@ -168,14 +168,6 @@ The model adapted allocations during the COVID crash and subsequent supply shock
 
 ![Supply Shock Timeline](output/figures/test/supply_shock_analysis/combined_allocation_timelines.png)
 
-### VIX Regime Analysis
-
-Portfolio positioning responds appropriately to volatility regime changes:
-
-![VIX Regime Comparison](output/figures/test/vix_analysis/vix_regime_comparison.png)
-
-![VIX Events Timeline](output/figures/test/vix_analysis/vix_events_timeline.png)
-
 ---
 
 <h2 id="usage">Usage Guide</h2>
@@ -238,352 +230,64 @@ output/
 
 <h2 id="config-manual">Configuration Manual</h2>
 
-The `config/config.yaml` file controls all aspects of the pipeline. Below is a comprehensive reference.
+All settings live in `config/config.yaml`. Key sections:
 
-### 📅 Data Configuration
+| Section | What It Controls |
+|---------|------------------|
+| `data` | Train/val/test date splits, data directories |
+| `assets` | Which assets to trade, categories, display names |
+| `macro` | Enabled macro indicators and smoothing params |
+| `macro_lags` | Publication delays to prevent look-ahead bias |
+| `regimes` | Jump Model λ, XGBoost hyperparameters, state count |
+| `portfolio` | Risk aversion, max weights, transaction costs |
+
+### Adding a New Asset
+
+1. Drop `MY_ASSET.csv` into `asset_universe/`
+2. Add `MY_ASSET` to `assets.investable` in config
+3. Run the pipeline
+
+### Key Parameters
 
 ```yaml
+# Date splits
 data:
-  start_date: 1945-01-01        # Earliest date to load
-  end_date: 2025-11-28          # Latest date to load
-  
-  train_start: 1945-01-01       # Training period start
-  train_end: 2004-12-31         # Training period end
-  
-  val_start: 2005-01-01         # Validation period start
-  val_end: 2007-12-31           # Validation period end
-  
-  test_start: 2008-01-01        # Test period start (includes GFC)
-  test_end: 2025-11-28          # Test period end
-  
-  asset_dir: asset_universe     # Directory for asset CSV files
-  macro_dir: macro_universe     # Directory for macro CSV files
-  ancillary_dir: ancillary      # Directory for ancillary data
-```
+  train_end: 2004-12-31
+  val_end: 2007-12-31
+  test_start: 2008-01-01
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `train_*` | date | Model training window (no test data leakage) |
-| `val_*` | date | Lambda tuning and hyperparameter selection |
-| `test_*` | date | Out-of-sample evaluation period |
-
----
-
-### 📊 Asset Universe
-
-```yaml
-assets:
-  investable:
-    - US_CASH_RETURN              # Cash equivalent
-    - US_10Y_GOV_BOND_RETURN      # Government bonds
-    - GOLD_TOTAL_RETURN           # Safe haven
-    # ... add more assets
-  
-  excluded:
-    - IBOXX_USD_LIQ_IG_TOTAL_RETURN  # Excluded from portfolio
-  
-  categories:
-    cash:
-      - US_CASH_RETURN
-    government_bonds:
-      - US_10Y_GOV_BOND_RETURN
-    safe_havens:
-      - GOLD_TOTAL_RETURN
-      - CHF_TOTAL_RETURN
-    # ... define more categories
-  
-  display_names:
-    US_CASH_RETURN: "US T-Bills"
-    GOLD_TOTAL_RETURN: "Gold"
-```
-
-| Section | Purpose |
-|---------|---------|
-| `investable` | Assets included in portfolio optimization |
-| `excluded` | Assets loaded but not traded (for features only) |
-| `categories` | Regime-specific allocation buckets |
-| `display_names` | Human-readable labels for plots |
-
-**To add a new asset:**
-1. Place `MY_ASSET.csv` in `asset_universe/`
-2. Add `MY_ASSET` to `assets.investable`
-3. (Optional) Assign to a category and add display name
-
----
-
-### 📈 Macro Indicators
-
-```yaml
-macro:
-  enabled:
-    - VIX                    # Market volatility
-    - GPRI                   # Geopolitical Risk Index
-    - US_DEBT_TO_GDP         # Fiscal sustainability
-    - US_INFLATION_RATE      # CPI
-  
-  disabled:
-    - US_UNEMPLOYMENT_RATE   # Not used currently
-    - EPU                    # Economic Policy Uncertainty
-  
-  params:
-    vix_halflife: 63         # Exponential smoothing halflife (days)
-    gpr_halflife: 21
-    inflation_halflife: 21
-```
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `*_halflife` | 21-63 | Controls smoothing for feature engineering |
-
----
-
-### ⏱️ Publication Lag Modeling
-
-```yaml
-macro_lags:
-  enabled: true              # CRITICAL for preventing look-ahead bias
-  vix_days: 1                # Real-time market data
-  gpr_days: 5                # News aggregation delay
-  inflation_days: 15         # CPI released ~15 days after month end
-  debt_to_gdp_days: 60       # Quarterly + 60 day reporting delay
-  gdp_growth_days: 90        # GDP quarterly + 30 day advance estimate
-  unemployment_days: 7       # Monthly, released first Friday
-```
-
-> ⚠️ **Warning**: Setting `enabled: false` will cause look-ahead bias in backtests!
-
----
-
-### 🔀 Regime Configuration
-
-```yaml
+# Regime detection
 regimes:
   jump_model:
-    lambda_candidates: [0.0, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0]
-    default_lambda: 5.0       # Fallback if tuning fails
-    n_states: 3               # 3 = calm/inflationary/crisis
-  
-  labels:
-    0: calm
-    1: inflationary
-    2: crisis
-  
+    n_states: 3              # calm / inflationary / crisis
+    default_lambda: 5.0
   xgboost:
-    max_depth: 5              # Tree depth (overfitting control)
-    n_estimators: 100         # Number of boosting rounds
-    learning_rate: 0.1        # Step size shrinkage
-    subsample: 0.8            # Row sampling ratio
-    colsample_bytree: 0.8     # Column sampling ratio
-    tune_hyperparameters: true
-    
-    forecast_horizon:
-      mode: shift             # 'shift' = predict next day
-      horizon_days: 1
-  
-  rolling:
-    enabled: false            # Walk-forward retraining
-    training_years: 11        # Lookback window
-    update_frequency_months: 6
-  
-  diagnostics:
-    enabled: true
-    shap_plots: true          # Generate SHAP explanations
-```
+    max_depth: 5
+    subsample: 0.8
 
-| Parameter | Impact |
-|-----------|--------|
-| `lambda_candidates` | Higher λ = more persistent regimes, fewer switches |
-| `n_states` | Number of market regimes (2 or 3) |
-| `max_depth` | Lower = less overfitting, higher bias |
-| `subsample` | Lower = more regularization |
-
----
-
-### 💼 Portfolio Optimization
-
-```yaml
+# Portfolio
 portfolio:
-  gamma_risk: 10.0           # Risk aversion coefficient
-  gamma_trade: 1.0           # Transaction cost penalty
-  transaction_cost: 0.0005   # 5 bps per trade
-  
-  max_weight: 0.40           # Max allocation to single asset
-  min_weight: 0.00           # Min allocation (no shorting)
-  max_leverage: 1.0          # Max gross exposure
-  
-  min_bullish_assets: 3      # Require at least 3 bullish forecasts
-  covariance_halflife: 252   # Halflife for covariance estimation
-  
-  # Regime-specific allocation constraints
-  regime_allocation:
-    enabled: true
-    
-    calm:
-      preferred_categories:
-        - investment_grade
-        - government_bonds
-      max_category_weights:
-        cash: 0.20
-        high_yield: 0.25
-    
-    crisis:
-      preferred_categories:
-        - cash
-        - safe_havens
-      max_category_weights:
-        cash: 0.60
-        high_yield: 0.05
-  
-  # Gradual risk-off (continuous, not binary)
-  gradual_risk_off:
-    enabled: true
-    crisis_probability_threshold: 0.3   # Start reducing risk
-    max_cash_at_crisis: 0.80            # Max cash when P(crisis)=1
-  
-  # Cash floor (always hold minimum cash)
-  cash_floor:
-    enabled: true
-    c0: 0.05                  # Base 5% minimum
-    c1: 0.75                  # Scale with crisis probability
+  gamma_risk: 10.0           # Higher = more conservative
+  max_weight: 0.40           # Max single-asset allocation
+  transaction_cost: 0.0005   # 5 bps
 ```
 
-| Parameter | Strategy Impact |
-|-----------|-----------------|
-| `gamma_risk` | Higher = more conservative (MinVar-like) |
-| `gamma_trade` | Higher = lower turnover, stickier positions |
-| `max_weight` | Diversification constraint |
-| `gradual_risk_off` | Smooth transition vs. binary regime switch |
+### Quick Recipes
+
+| Goal | Changes |
+|------|--------|
+| **Conservative** | `gamma_risk: 15`, `max_weight: 0.25` |
+| **Aggressive** | `gamma_risk: 5`, `max_weight: 0.50` |
+| **Fast dev runs** | `train_start: 2000-01-01`, `tune_hyperparameters: false` |
 
 ---
 
-### 📊 Benchmarks
+<h2 id="limitations">Limitations</h2>
 
-```yaml
-benchmark_60_40:
-  enabled: true
-  gov_assets:
-    - IBOXX_USD_TREASURY
-    - US_10Y_GOV_BOND
-  credit_assets:
-    - IBOXX_USD_CORPORATE
-    - US_AAA_CORP_BOND
-  gov_weight: 0.6
-  credit_weight: 0.4
-
-evaluation:
-  benchmarks:
-    - equal_weight            # EW buy-and-hold
-    - buy_hold                # Single asset buy-and-hold
-    - sixty_forty             # 60/40 gov/credit
-```
-
----
-
-### 📁 Output Configuration
-
-```yaml
-output:
-  figures_dir: output/figures
-  models_dir: output/models
-  results_dir: output/results
-  regime_stats_dir: output/regime_statistics
-  dpi: 150                   # Plot resolution
-  format: png                # Output format
-
-logging:
-  level: INFO                # DEBUG, INFO, WARNING, ERROR
-  file: output/fioracle.log
-  console: true
-```
-
----
-
-### 🚀 Quick Customization Recipes
-
-<details>
-<summary><b>Recipe 1: Conservative Portfolio</b></summary>
-
-```yaml
-portfolio:
-  gamma_risk: 15.0           # More risk-averse
-  max_weight: 0.30           # More diversified
-  gradual_risk_off:
-    enabled: true
-    crisis_probability_threshold: 0.2   # Earlier risk-off
-    max_cash_at_crisis: 0.90
-```
-</details>
-
-<details>
-<summary><b>Recipe 2: Aggressive Portfolio</b></summary>
-
-```yaml
-portfolio:
-  gamma_risk: 5.0            # Less risk-averse
-  max_weight: 0.50           # Allow concentration
-  gradual_risk_off:
-    enabled: false           # Binary regime switch
-```
-</details>
-
-<details>
-<summary><b>Recipe 3: Fast Development Runs</b></summary>
-
-```yaml
-data:
-  train_start: 2000-01-01    # Shorter training
-  
-regimes:
-  jump_model:
-    lambda_candidates: [1.0, 5.0]  # Fewer candidates
-  xgboost:
-    n_estimators: 50         # Fewer trees
-    tune_hyperparameters: false
-  rolling:
-    enabled: false
-```
-</details>
-
-<details>
-<summary><b>Recipe 4: Full Walk-Forward Validation</b></summary>
-
-```yaml
-regimes:
-  rolling:
-    enabled: true
-    training_years: 15
-    validation_years: 3
-    update_frequency_months: 6
-
-evaluation:
-  use_walk_forward: true
-```
-</details>
-
----
-
-<h2 id="limitations">Current Limitations & Future Work</h2>
-
-### Current Limitations
-
-| Limitation | Description |
-|------------|-------------|
-| **Regime Lag** | Regime detection inherently lags market conditions; crisis signals may arrive 1-3 days after drawdowns begin |
-| **Transaction Costs** | Model assumes 5bps per trade; actual costs vary by instrument and market conditions |
-| **Liquidity** | No explicit liquidity constraints; some assets (e.g., inflation swaps) may have limited market depth |
-| **Short Selling** | Current implementation is long-only; defensive positioning relies on rotation to cash rather than shorting |
-| **Single Currency** | USD-denominated portfolio; FX hedging not modeled for non-USD assets |
-| **Macro Data Quality** | Historical macro series may have revisions not captured in backtest |
-
-### Future Work
-
-- [ ] **Ensemble Regime Detection**: Combine Jump Model with HMM and LSTM for more robust regime signals
-- [ ] **Adaptive Transaction Cost Modeling**: Estimate costs dynamically based on volatility and liquidity
-- [ ] **Multi-Currency Extension**: Add FX hedging module for global fixed income allocation
-- [ ] **Alternative Data**: Incorporate news sentiment, Fed communication analysis, flow data
-- [ ] **Risk Parity Integration**: Add risk parity as alternative allocation strategy
-- [ ] **Explainability Dashboard**: Interactive SHAP-based analysis of regime forecasts
-- [ ] **Live Trading Integration**: API connectors for execution platforms
+- **Regime lag**: Crisis signals may arrive 1–3 days after drawdowns begin
+- **Long-only**: No shorting; defense = rotate to cash/safe havens
+- **USD only**: FX hedging not modeled
+- **Fixed costs**: Assumes 5 bps; real spreads vary by instrument
 
 ---
 
