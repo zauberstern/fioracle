@@ -1,13 +1,5 @@
 """
-Performance evaluation and professional visualizations.
-
-Key Fixes Applied:
-- Separate plot files instead of combined comprehensive analysis
-- Correct benchmark labeling (shows actual benchmark type)
-- Fixed return annualization and scaling consistency
-- Fixed benchmark drawdown truncation bug
-- Fixed rolling Sharpe calculation issues
-- Added asset allocation timeline chart
+Performance metrics and visualization.
 """
 
 import numpy as np
@@ -68,16 +60,7 @@ def build_60_40_benchmark(
     split_returns: pd.DataFrame,
     config: dict
 ) -> Optional[tuple]:
-    """
-    Build 60/40 gov/credit benchmark from config.
-        
-        Args:
-        split_returns: DataFrame of asset returns
-        config: Configuration dict with benchmark_60_40 section
-            
-        Returns:
-        Tuple of (benchmark_series, benchmark_name) or None if not enough assets
-    """
+    """60/40 gov/credit benchmark from config."""
     bench_cfg = config.get('benchmark_60_40', {})
     if not bench_cfg.get('enabled', False):
         return None
@@ -120,16 +103,7 @@ def build_all_benchmarks(
     split_returns: pd.DataFrame,
     config: dict
 ) -> Dict[str, pd.Series]:
-    """
-    Build all configured benchmarks including:
-    - EW Buy-and-Hold
-    - 60/40 Government/Credit
-    - Barbell Strategy (85/15)
-    - Diversified Core FI Strategy
-    
-    Returns:
-        Dict mapping benchmark_name -> returns series
-    """
+    """Build EW, 60/40, Barbell, and Diversified Core benchmarks."""
     benchmarks = {}
     
     # EW Buy-and-Hold (always available)
@@ -184,7 +158,7 @@ plt.rcParams.update({
 
 
 class Evaluator:
-    """Performance evaluation with proper return calculations."""
+    """Compute Sharpe, drawdown, turnover, and generate charts."""
     
     def __init__(self, annualization_factor: int = 252, transaction_cost: float = 0.0005):
         self.annualization_factor = annualization_factor
@@ -195,9 +169,10 @@ class Evaluator:
         portfolio_returns: pd.Series,
         portfolio_weights: pd.DataFrame,
         benchmark_returns: Optional[pd.Series] = None,
-        risk_free_rate: Optional[pd.Series] = None
+        risk_free_rate: Optional[pd.Series] = None,
+        returns_are_excess: bool = True
     ) -> Dict[str, float]:
-        """Compute annualized portfolio performance metrics."""
+        """Annualized Sharpe, drawdown, Calmar, turnover, total return."""
         if len(portfolio_returns) == 0 or portfolio_returns.isna().all():
             return self._empty_metrics()
         
@@ -207,14 +182,19 @@ class Evaluator:
         if n_days == 0:
             return self._empty_metrics()
         
-        # Risk-free rate alignment
-        if risk_free_rate is not None and risk_free_rate.notna().any():
+        # Handle excess returns computation
+        # BUG FIX: Backtest now returns excess returns, so don't subtract RF again
+        if returns_are_excess:
+            # Returns from backtest are already excess - use directly
+            excess_rets = returns
+            rf = pd.Series(0.0, index=returns.index)
+        elif risk_free_rate is not None and risk_free_rate.notna().any():
+            # Raw returns provided - subtract RF to get excess
             rf = risk_free_rate.reindex(returns.index)
-            # Forward-fill short gaps (weekends/holidays), limit to 5 days
-            rf = rf.ffill(limit=5).fillna(0.0)  # Fall back to 0 only for truly missing periods
+            rf = rf.ffill(limit=5).fillna(0.0)
             excess_rets = returns - rf
         else:
-            # No RF available - use raw returns (not excess)
+            # No RF available - use raw returns
             excess_rets = returns
             rf = pd.Series(0.0, index=returns.index)
         
@@ -286,7 +266,7 @@ class Evaluator:
         risk_free_rate: Optional[pd.Series] = None,
         apply_transaction_costs: bool = True
     ) -> float:
-        """Compute Sharpe Ratio of 0/1 Strategy."""
+        """0/1 strategy: invest when bullish (0), cash when bearish (1)."""
         common_idx = asset_returns.index.intersection(regime_forecasts.index)
         if len(common_idx) == 0:
             return 0.0
@@ -319,7 +299,7 @@ class Evaluator:
         lambda_candidates: List[float] = [0.1, 1.0, 5.0, 10.0],
         n_splits: int = 5
     ) -> tuple:
-        """Optimize lambda using time-series cross-validation."""
+        """Time-series CV to pick the best lambda."""
         from sklearn.model_selection import TimeSeriesSplit
         from .regimes import JumpModel
         
@@ -377,7 +357,7 @@ class Evaluator:
         save_dir: Optional[str] = None,
         all_benchmarks: Optional[Dict[str, pd.Series]] = None
     ):
-        """Generate all plots as SEPARATE files with multiple benchmarks."""
+        """Save cumulative, drawdown, allocation, Sharpe, heatmap, distribution, and pie charts."""
         if len(portfolio_returns) == 0:
             self._save_empty_placeholder(save_dir, strategy_name)
             return
@@ -920,20 +900,7 @@ def generate_benchmark_comparison_report(
     save_dir: str,
     risk_free_rate: Optional[pd.Series] = None
 ) -> pd.DataFrame:
-    """
-    Generate comprehensive benchmark comparison report.
-    
-    Args:
-        portfolio_returns: Strategy returns
-        portfolio_weights: Strategy weights
-        benchmarks: Dict of benchmark returns
-        strategy_name: Name of the strategy
-        save_dir: Directory to save report
-        risk_free_rate: Risk-free rate series
-        
-    Returns:
-        DataFrame with comparison metrics
-    """
+    """Table of metrics for strategy vs. all benchmarks."""
     evaluator = Evaluator()
     
     results = []
@@ -956,8 +923,10 @@ def generate_benchmark_comparison_report(
         bench_aligned = bench_returns.loc[common_idx]
         rf_aligned = risk_free_rate.loc[common_idx] if risk_free_rate is not None else None
         
+        # Benchmarks use RAW returns, not excess - must subtract RF
         bench_metrics = evaluator.compute_portfolio_metrics(
-            bench_aligned, dummy_weights.loc[common_idx], None, rf_aligned
+            bench_aligned, dummy_weights.loc[common_idx], None, rf_aligned,
+            returns_are_excess=False  # Benchmark returns are raw, need RF subtraction
         )
         bench_metrics['name'] = bench_name
         results.append(bench_metrics)

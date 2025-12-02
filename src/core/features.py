@@ -1,12 +1,11 @@
 """
-Feature engineering for regime identification and forecasting.
+Feature engineering for regime detection and forecasting.
 
-Two feature sets:
-1. Return Features (8 features per asset) - For Jump Model
-2. Macro Features - Cross-asset features for XGBoost forecasting
+Creates two feature sets:
+- Return features (8 per asset) for the Jump Model
+- Macro features for XGBoost
 
-IMPORTANT: Uses ancillary data (RF rate, SP500, yields) for features
-but these are NEVER used in portfolio construction.
+Note: Ancillary data (RF rate, SP500, yields) is used for features but never for trading.
 """
 
 import pandas as pd
@@ -26,12 +25,7 @@ def engineer_features(
     raw_data: pd.DataFrame,
     config: Optional[dict] = None
 ) -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
-    """
-    Engineer features from raw data.
-    
-    Returns:
-        Tuple of (asset_features_dict, macro_features_df)
-    """
+    """Build asset features and macro features from raw data."""
     print("Engineering features...")
     
     # Get risk-free returns from ancillary data
@@ -56,7 +50,7 @@ def engineer_features(
 
 
 def _get_risk_free_returns(raw_data: pd.DataFrame) -> pd.Series:
-    """Get risk-free rate returns from ancillary data."""
+    """Extract risk-free rate returns from ancillary data."""
     rf_col = [c for c in raw_data.columns if 'ancillary_risk_free' in c.lower()]
     if rf_col:
         rf_series = raw_data[rf_col[0]].pct_change()
@@ -70,7 +64,7 @@ def _get_risk_free_returns(raw_data: pd.DataFrame) -> pd.Series:
 
 
 def _construct_asset_returns(raw_data: pd.DataFrame, rf_returns: pd.Series) -> Dict[str, pd.Series]:
-    """Construct excess returns for INVESTABLE assets only."""
+    """Build excess returns for investable assets."""
     asset_returns = {}
     
     # Check if RF is available (not all NaN)
@@ -100,7 +94,7 @@ def _construct_asset_returns(raw_data: pd.DataFrame, rf_returns: pd.Series) -> D
 
 
 def compute_asset_features(excess_returns: pd.Series) -> pd.DataFrame:
-    """Compute 8 return features for a single asset."""
+    """Build 8 return-based features for a single asset."""
     features = pd.DataFrame(index=excess_returns.index, dtype=float)
     
     # Average returns
@@ -125,11 +119,13 @@ def compute_asset_features(excess_returns: pd.Series) -> pd.DataFrame:
         sortino = avg_map[avg_hl] / (dd_map[hl] + 1e-12)
         features[f'sortino_hl{hl}'] = sortino.replace([np.inf, -np.inf], np.nan)
     
-    return _standardize_features(features)
+    # NOTE: Raw features returned - standardization happens in regimes.py 
+    # AFTER train/test split to prevent look-ahead bias
+    return features
 
 
 def _compute_downside_deviation(returns: pd.Series, halflife: int) -> pd.Series:
-    """Compute exponentially weighted downside deviation."""
+    """EWM downside deviation (only negative returns count)."""
     downside = returns.copy()
     downside[downside > 0] = 0
     squared = downside ** 2
@@ -138,7 +134,7 @@ def _compute_downside_deviation(returns: pd.Series, halflife: int) -> pd.Series:
 
 
 def _apply_macro_lag(series: pd.Series, lag_days: int, enabled: bool) -> pd.Series:
-    """Shift data forward to prevent look-ahead bias from publication delays."""
+    """Shift data forward to simulate publication delay."""
     if not enabled or lag_days is None or lag_days <= 0:
         return series
     return series.shift(lag_days)
@@ -149,12 +145,7 @@ def _compute_macro_features(
     asset_returns: Dict[str, pd.Series],
     config: Optional[dict] = None
 ) -> pd.DataFrame:
-    """
-    Compute macro features from macro_universe and ancillary data.
-    
-    Includes VIX, GPR, Debt/GDP, HY OAS, inflation, yield curve, and stock-bond correlation.
-    Optionally applies publication lags to prevent look-ahead bias.
-    """
+    """Build macro features from VIX, GPR, yields, inflation, etc."""
     macro_features = pd.DataFrame(index=raw_data.index, dtype=float)
     
     # Get macro lag configuration
@@ -169,6 +160,18 @@ def _compute_macro_features(
     lag_unemp = macro_lags_cfg.get('unemployment_days', 0)
     lag_hy = macro_lags_cfg.get('hy_oas_days', 0)
     
+    # Get halflife parameters from config (with defaults)
+    macro_params = (config or {}).get('macro', {}).get('params', {})
+    hl_vix = macro_params.get('vix_halflife', 63)
+    hl_gpr = macro_params.get('gpr_halflife', 21)
+    hl_debt = macro_params.get('debt_gdp_halflife', 63)
+    hl_hy = macro_params.get('hy_oas_halflife', 21)
+    hl_infl = macro_params.get('inflation_halflife', 21)
+    hl_epu = macro_params.get('epu_halflife', 21)
+    hl_gdp = macro_params.get('gdp_halflife', 63)
+    hl_unemp = macro_params.get('unemployment_halflife', 21)
+    hl_m2v = macro_params.get('m2_velocity_halflife', 63)
+    
     # ========================================================================
     # VIX - Market Volatility
     # ========================================================================
@@ -177,8 +180,8 @@ def _compute_macro_features(
         vix_data = _apply_macro_lag(raw_data[vix_col], lag_vix, lags_enabled)
         # Forward-fill gaps up to 5 days for VIX (daily data)
         vix_data = vix_data.ffill(limit=5)
-        macro_features['vix_logdiff_ewma63'] = _ewm_logdiff(vix_data, halflife=63)
-        vix_level = vix_data.ewm(halflife=21, min_periods=21).mean()
+        macro_features[f'vix_logdiff_ewma{hl_vix}'] = _ewm_logdiff(vix_data, halflife=hl_vix)
+        vix_level = vix_data.ewm(halflife=hl_gpr, min_periods=hl_gpr).mean()  # Use shorter hl for level
         vix_std = vix_level.std()
         if vix_std > 1e-10:
             macro_features['vix_level_norm'] = (vix_level - vix_level.mean()) / vix_std
@@ -191,8 +194,8 @@ def _compute_macro_features(
         gpr_data = _apply_macro_lag(raw_data[gpr_col], lag_gpr, lags_enabled)
         # Forward-fill gaps up to 7 days for GPR (may have weekends/holidays)
         gpr_data = gpr_data.ffill(limit=7)
-        macro_features['gpr_logdiff_ewma21'] = _ewm_logdiff(gpr_data, halflife=21)
-        gpr_level = gpr_data.ewm(halflife=21, min_periods=21).mean()
+        macro_features[f'gpr_logdiff_ewma{hl_gpr}'] = _ewm_logdiff(gpr_data, halflife=hl_gpr)
+        gpr_level = gpr_data.ewm(halflife=hl_gpr, min_periods=hl_gpr).mean()
         gpr_std = gpr_level.std()
         if gpr_std > 1e-10:
             macro_features['gpr_level_norm'] = (gpr_level - gpr_level.mean()) / gpr_std
@@ -208,7 +211,7 @@ def _compute_macro_features(
         if debt_std > 1e-10:
             macro_features['debt_gdp_level'] = (debt_data - debt_data.mean()) / debt_std
         debt_diff = debt_data.diff()
-        macro_features['debt_gdp_change_ewma63'] = debt_diff.ewm(halflife=63, min_periods=63).mean()
+        macro_features[f'debt_gdp_change_ewma{hl_debt}'] = debt_diff.ewm(halflife=hl_debt, min_periods=hl_debt).mean()
     
     # ========================================================================
     # HY Corporate OAS (Credit Spreads)
@@ -218,7 +221,7 @@ def _compute_macro_features(
         hy_data = _apply_macro_lag(raw_data[hy_col], lag_hy, lags_enabled)
         hy_data = hy_data.ffill(limit=5)
         hy_returns = hy_data.pct_change()
-        macro_features['hy_oas_return_ewma21'] = hy_returns.ewm(halflife=21, min_periods=21).mean()
+        macro_features[f'hy_oas_return_ewma{hl_hy}'] = hy_returns.ewm(halflife=hl_hy, min_periods=hl_hy).mean()
         hy_std = hy_data.std()
         if hy_std > 1e-10:
             macro_features['hy_oas_level_norm'] = (hy_data - hy_data.mean()) / hy_std
@@ -230,8 +233,8 @@ def _compute_macro_features(
     if epu_col:
         epu_data = _apply_macro_lag(raw_data[epu_col], lag_epu, lags_enabled)
         epu_data = epu_data.ffill(limit=30)
-        macro_features['epu_logdiff_ewma21'] = _ewm_logdiff(epu_data, halflife=21)
-        epu_level = epu_data.ewm(halflife=21, min_periods=21).mean()
+        macro_features[f'epu_logdiff_ewma{hl_epu}'] = _ewm_logdiff(epu_data, halflife=hl_epu)
+        epu_level = epu_data.ewm(halflife=hl_epu, min_periods=hl_epu).mean()
         epu_std = epu_level.std()
         if epu_std > 1e-10:
             macro_features['epu_level_norm'] = (epu_level - epu_level.mean()) / epu_std
@@ -244,8 +247,8 @@ def _compute_macro_features(
         gdp_data = _apply_macro_lag(raw_data[gdp_col], lag_gdp, lags_enabled)
         gdp_data = gdp_data.ffill(limit=90)
         macro_features['gdp_growth_level'] = gdp_data / 100.0
-        gdp_ewm = gdp_data.ewm(halflife=63, min_periods=63).mean()
-        macro_features['gdp_growth_ewma63'] = gdp_ewm / 100.0
+        gdp_ewm = gdp_data.ewm(halflife=hl_gdp, min_periods=hl_gdp).mean()
+        macro_features[f'gdp_growth_ewma{hl_gdp}'] = gdp_ewm / 100.0
     
     # ========================================================================
     # Unemployment Rate (monthly data - forward-fill up to 30 days)
@@ -256,7 +259,7 @@ def _compute_macro_features(
         unemp_data = unemp_data.ffill(limit=30)
         macro_features['unemployment_level'] = unemp_data / 100.0
         unemp_diff = unemp_data.diff()
-        macro_features['unemployment_change_ewma21'] = unemp_diff.ewm(halflife=21, min_periods=21).mean()
+        macro_features[f'unemployment_change_ewma{hl_unemp}'] = unemp_diff.ewm(halflife=hl_unemp, min_periods=hl_unemp).mean()
     
     # ========================================================================
     # US Inflation (monthly data - forward-fill up to 30 days)
@@ -268,7 +271,23 @@ def _compute_macro_features(
         # Inflation is already in % terms
         macro_features['inflation_level'] = infl_data / 100.0
         infl_diff = infl_data.diff()
-        macro_features['inflation_change_ewma21'] = infl_diff.ewm(halflife=21, min_periods=21).mean()
+        macro_features[f'inflation_change_ewma{hl_infl}'] = infl_diff.ewm(halflife=hl_infl, min_periods=hl_infl).mean()
+    
+    # ========================================================================
+    # M2 Velocity (quarterly data - forward-fill up to 90 days)
+    # ========================================================================
+    lag_m2v = macro_lags_cfg.get('m2_velocity_days', 60)
+    m2v_col = _find_column(raw_data, ['macro_us_m2_velocity', 'macro_m2_velocity', 'macro_m2velocity'])
+    if m2v_col:
+        m2v_data = _apply_macro_lag(raw_data[m2v_col], lag_m2v, lags_enabled)
+        m2v_data = m2v_data.ffill(limit=90)  # Quarterly data
+        # Normalize level
+        m2v_std = m2v_data.std()
+        if m2v_std > 1e-10:
+            macro_features['m2_velocity_level'] = (m2v_data - m2v_data.mean()) / m2v_std
+        # Rate of change
+        m2v_pct = m2v_data.pct_change()
+        macro_features[f'm2_velocity_change_ewma{hl_m2v}'] = m2v_pct.ewm(halflife=hl_m2v, min_periods=hl_m2v).mean()
     
     # ========================================================================
     # Yield Curve Features (from ancillary - daily, forward-fill weekends)
@@ -310,7 +329,7 @@ def _compute_macro_features(
 
 
 def _find_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
-    """Find first matching column."""
+    """Find first column that matches any of the candidate names."""
     for name in candidates:
         matches = [c for c in df.columns if name.lower() in c.lower()]
         if matches:
@@ -319,7 +338,7 @@ def _find_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
 
 
 def _find_asset_column(asset_returns: Dict[str, pd.Series], candidates: List[str]) -> Optional[str]:
-    """Find matching asset."""
+    """Find first asset that matches any of the candidate names."""
     for name in candidates:
         if name in asset_returns:
             return name
@@ -330,14 +349,14 @@ def _find_asset_column(asset_returns: Dict[str, pd.Series], candidates: List[str
 
 
 def _ewm_logdiff(series: pd.Series, halflife: int) -> pd.Series:
-    """Compute log-difference and EWM."""
+    """Log-difference then EWM smooth."""
     clean = series.replace(0, np.nan)
     log_diff = np.log(clean).diff()
     return log_diff.ewm(halflife=halflife, min_periods=halflife).mean()
 
 
 def _standardize_features(features: pd.DataFrame) -> pd.DataFrame:
-    """Standardize features to zero mean, unit variance."""
+    """Z-score normalization."""
     standardized = features.replace([np.inf, -np.inf], np.nan)
     means = standardized.mean(skipna=True)
     stds = standardized.std(skipna=True, ddof=0).replace(0, np.nan)
@@ -345,7 +364,7 @@ def _standardize_features(features: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_expanded_feature_set(asset_features: pd.DataFrame, macro_features: pd.DataFrame) -> pd.DataFrame:
-    """Combine asset and macro features for XGBoost."""
+    """Merge asset and macro features for XGBoost."""
     common_idx = asset_features.index.intersection(macro_features.index)
     
     expanded = pd.DataFrame(index=common_idx)

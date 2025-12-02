@@ -1,12 +1,5 @@
 """
-Shared utilities: logging, config, caching, and path management.
-
-Provides essential utility functions for:
-- Logging configuration
-- Configuration file loading with defaults
-- Fast parquet caching for data
-- Path resolution for data and output directories
-- Date validation and conversion
+Shared utilities for logging, config loading, caching, and path management.
 """
 
 import logging
@@ -18,16 +11,7 @@ import warnings
 
 
 def setup_logging(level: str = 'INFO', config: Optional[Dict[str, Any]] = None) -> logging.Logger:
-    """
-    Configure logger with optional config file settings.
-    
-    Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR)
-        config: Optional config dict with logging settings
-        
-    Returns:
-        Configured logger instance
-    """
+    """Set up the logger with optional config file settings."""
     log_config = {}
     if config and isinstance(config, dict) and 'logging' in config:
         log_config = config.get('logging', {})
@@ -69,15 +53,7 @@ def setup_logging(level: str = 'INFO', config: Optional[Dict[str, Any]] = None) 
 
 
 def load_config(config_path: Union[str, Path] = 'config/config.yaml') -> Dict[str, Any]:
-    """
-    Load YAML config file with fallback to defaults.
-    
-    Args:
-        config_path: Path to config YAML file
-        
-    Returns:
-        Configuration dictionary
-    """
+    """Load YAML config, falling back to defaults if file is missing or broken."""
     config_file = Path(config_path)
     
     if not config_file.exists():
@@ -100,7 +76,7 @@ def load_config(config_path: Union[str, Path] = 'config/config.yaml') -> Dict[st
 
 
 def _deep_merge(base: Dict, override: Dict) -> Dict:
-    """Recursively merge two dictionaries, with override taking precedence."""
+    """Merge dicts recursively; override wins on conflicts."""
     result = base.copy()
     
     for key, value in override.items():
@@ -113,12 +89,7 @@ def _deep_merge(base: Dict, override: Dict) -> Dict:
 
 
 def get_default_config() -> Dict[str, Any]:
-    """
-    Fallback configuration matching config.yaml structure.
-    
-    Returns:
-        Default configuration dictionary
-    """
+    """Default config that mirrors the config.yaml structure."""
     return {
         'data': {
             'start_date': '1945-01-01',
@@ -222,18 +193,7 @@ def cache_to_parquet(
     cache_dir: Union[str, Path] = 'data/cache',
     compression: str = 'snappy'
 ) -> Path:
-    """
-    Save DataFrame to parquet with compression.
-    
-    Args:
-        df: DataFrame to cache
-        name: Cache filename (without extension)
-        cache_dir: Cache directory path
-        compression: Compression algorithm (snappy, gzip, brotli)
-        
-    Returns:
-        Path to cached file
-    """
+    """Save DataFrame to a compressed parquet file."""
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
     
@@ -247,16 +207,7 @@ def load_from_parquet(
     name: str, 
     cache_dir: Union[str, Path] = 'data/cache'
 ) -> Optional[pd.DataFrame]:
-    """
-    Load DataFrame from parquet cache.
-    
-    Args:
-        name: Cache filename (without extension)
-        cache_dir: Cache directory path
-        
-    Returns:
-        DataFrame if found, None otherwise
-    """
+    """Load DataFrame from parquet cache if it exists."""
     cache_path = Path(cache_dir) / f"{name}.parquet"
     
     if cache_path.exists():
@@ -270,70 +221,34 @@ def load_from_parquet(
 
 
 def get_project_root() -> Path:
-    """
-    Get path to project root directory.
-    
-    Returns:
-        Path to project root
-    """
+    """Get the project root directory."""
     return Path(__file__).resolve().parent.parent.parent
 
 
 def get_data_dir() -> Path:
-    """
-    Get path to dataset directory.
-    
-    Returns:
-        Path to dataset directory
-    """
+    """Get the dataset directory."""
     return get_project_root() / "dataset"
 
 
 def get_output_dir() -> Path:
-    """
-    Get path to output directory.
-    
-    Returns:
-        Path to output directory
-    """
+    """Get the output directory."""
     return get_project_root() / "output"
 
 
 def get_config_dir() -> Path:
-    """
-    Get path to config directory.
-    
-    Returns:
-        Path to config directory
-    """
+    """Get the config directory."""
     return get_project_root() / "config"
 
 
 def ensure_dir(path: Union[str, Path]) -> Path:
-    """
-    Ensure directory exists, create if it doesn't.
-    
-    Args:
-        path: Directory path
-        
-    Returns:
-        Path object for the directory
-    """
+    """Create the directory if it doesn't exist."""
     dir_path = Path(path)
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
 
 def parse_date(date: Union[str, pd.Timestamp, None]) -> Optional[pd.Timestamp]:
-    """
-    Parse date string or Timestamp to pandas Timestamp.
-    
-    Args:
-        date: Date as string, Timestamp, or None
-        
-    Returns:
-        Parsed Timestamp or None
-    """
+    """Convert date string or Timestamp to pandas Timestamp."""
     if date is None:
         return None
     
@@ -351,19 +266,7 @@ def validate_date_range(
     start_date: Optional[Union[str, pd.Timestamp]],
     end_date: Optional[Union[str, pd.Timestamp]]
 ) -> Tuple[Optional[pd.Timestamp], Optional[pd.Timestamp]]:
-    """
-    Validate and parse date range.
-    
-    Args:
-        start_date: Start date
-        end_date: End date
-        
-    Returns:
-        Tuple of (start_timestamp, end_timestamp)
-        
-    Raises:
-        ValueError: If dates are invalid or start > end
-    """
+    """Validate that start_date comes before end_date."""
     start = parse_date(start_date)
     end = parse_date(end_date)
     
@@ -374,15 +277,7 @@ def validate_date_range(
 
 
 def get_annualization_factor(frequency: str = 'daily') -> int:
-    """
-    Get annualization factor for given frequency.
-    
-    Args:
-        frequency: Data frequency ('daily', 'monthly', 'annual')
-        
-    Returns:
-        Annualization factor (252 for daily, 12 for monthly, 1 for annual)
-    """
+    """Return 252 for daily, 12 for monthly, 1 for annual."""
     factors = {
         'daily': 252,
         'monthly': 12,

@@ -1,12 +1,10 @@
 """
-Data loading and alignment pipeline.
+Data loading and alignment.
 
 Loads from three directories:
-1. asset_universe/ - Investable fixed income assets
-2. macro_universe/ - Macro indicators for features
-3. ancillary/ - Supporting data (RF rate, SP500, yields) for features ONLY
-
-Key principle: Ancillary data is NEVER investable, only used for feature engineering.
+- asset_universe/ - Investable assets
+- macro_universe/ - Macro indicators for regime features
+- ancillary/ - Supporting data (RF rate, SP500, yields) for features only, never invested
 """
 
 import re
@@ -19,9 +17,7 @@ import numpy as np
 
 
 class DataPipeline:
-    """
-    Unified data loader with config-driven asset/macro management.
-    """
+    """Loads asset, macro, and ancillary data with config-driven filtering."""
 
     DATE_COLUMN_KEYS = {'date', 'timestamp', 'time', 'observation_date', 'ds', 'day'}
     
@@ -50,7 +46,7 @@ class DataPipeline:
         start_date: Optional[Union[str, pd.Timestamp]] = None,
         end_date: Optional[Union[str, pd.Timestamp]] = None,
     ) -> pd.DataFrame:
-        """Load and align all data sources."""
+        """Load all data sources and align them on the date index."""
         # Load investable assets
         asset_data = self._load_asset_universe()
         
@@ -74,8 +70,8 @@ class DataPipeline:
         combined = combined[~combined.index.duplicated(keep='first')]
         combined = combined.dropna(how='all')
         
-        # Apply forward-fill for macro and ancillary data (published at varying frequencies)
-        # Asset data should NOT be forward-filled as it represents actual price levels
+        # Forward-fill macro and ancillary data since they publish at varying frequencies
+        # Don't forward-fill asset data since those are actual price levels
         macro_cols = [c for c in combined.columns if c.startswith('macro_')]
         ancillary_cols = [c for c in combined.columns if c.startswith('ancillary_')]
         
@@ -93,7 +89,7 @@ class DataPipeline:
         return combined
     
     def _load_ancillary_data(self) -> pd.DataFrame:
-        """Load ancillary data: RF rate, SP500, yields (for features ONLY)."""
+        """Load RF rate, SP500, and yield data (used for features only)."""
         if not self.ancillary_dir.exists():
             warnings.warn(f"Ancillary directory not found: {self.ancillary_dir}")
             return pd.DataFrame()
@@ -101,7 +97,7 @@ class DataPipeline:
         series_dict = {}
         
         def _load_and_clean(path, col_name):
-            """Helper to load and clean series."""
+            """Load and clean a single series."""
             if not path.exists():
                 return None
             try:
@@ -144,7 +140,7 @@ class DataPipeline:
         return result
 
     def _load_asset_universe(self) -> pd.DataFrame:
-        """Load investable assets from asset_universe/."""
+        """Load all investable assets from asset_universe/."""
         if not self.asset_dir.exists():
             return pd.DataFrame()
 
@@ -182,7 +178,10 @@ class DataPipeline:
         return result.sort_index()
 
     def _load_macro_universe(self) -> pd.DataFrame:
-        """Load macro indicators from macro_universe/, respecting config enabled/disabled lists."""
+        """Load macro indicators, respecting config enabled/disabled lists.
+        
+        If an indicator is in both lists, enabled wins.
+        """
         if not self.macro_dir.exists():
             return pd.DataFrame()
 
@@ -191,25 +190,36 @@ class DataPipeline:
         enabled_list = macro_cfg.get('enabled', [])
         disabled_list = macro_cfg.get('disabled', [])
         
-        # Normalize names for matching (uppercase, no extension)
+        # Normalize names for matching (uppercase, no extension, no underscores for comparison)
         enabled_set = {e.upper().replace('.CSV', '').replace('_', '') for e in enabled_list} if enabled_list else None
+        enabled_set_full = {e.upper().replace('.CSV', '') for e in enabled_list} if enabled_list else set()
         disabled_set = {d.upper().replace('.CSV', '').replace('_', '') for d in disabled_list}
 
         series_dict = {}
         for path in sorted(self.macro_dir.glob('*.csv')):
             # Check if macro is enabled/disabled
             file_stem = path.stem.upper().replace('_', '')
+            file_stem_full = path.stem.upper()
             
-            # If disabled list has items, skip if in disabled list
-            if file_stem in disabled_set:
-                continue
+            # PRIORITY CHECK: If explicitly in enabled list, ALWAYS include
+            is_enabled = (
+                (enabled_set and file_stem in enabled_set) or
+                (file_stem_full in enabled_set_full) or
+                (enabled_set and any(e in file_stem or file_stem in e for e in enabled_set))
+            )
             
-            # If enabled list has items, skip if NOT in enabled list
-            if enabled_set and file_stem not in enabled_set:
-                # Try partial match (e.g., "VIX" matches "VIX.csv")
-                partial_match = any(e in file_stem or file_stem in e for e in enabled_set)
-                if not partial_match:
+            # If explicitly enabled, skip the disabled check
+            if not is_enabled:
+                # If disabled list has items, skip if in disabled list
+                if file_stem in disabled_set:
                     continue
+                
+                # If enabled list has items, skip if NOT in enabled list
+                if enabled_set and file_stem not in enabled_set:
+                    # Try partial match (e.g., "VIX" matches "VIX.csv")
+                    partial_match = any(e in file_stem or file_stem in e for e in enabled_set)
+                    if not partial_match:
+                        continue
             try:
                 df = self._read_csv(path)
                 
@@ -285,7 +295,7 @@ class DataPipeline:
         return df
 
     def _select_value_column(self, columns: List[str]) -> Optional[str]:
-        """Select the best value column."""
+        """Pick the best column to use as the value."""
         cols_lower = {c.lower().replace(' ', '_'): c for c in columns}
         
         for pref in self.VALUE_COLUMN_PREFERENCES:
@@ -300,7 +310,7 @@ class DataPipeline:
         return None
 
     def _slugify(self, name: str) -> str:
-        """Convert filename to column name slug."""
+        """Turn a filename into a clean column name."""
         slug = name.lower()
         slug = re.sub(r'[^a-z0-9]+', '_', slug)
         slug = re.sub(r'_+', '_', slug)
@@ -312,7 +322,7 @@ class DataPipeline:
         return slug
 
     def get_asset_availability(self, data: pd.DataFrame) -> Dict[str, pd.Timestamp]:
-        """Get first available date for each asset."""
+        """Return the first available date for each asset."""
         availability = {}
         for col in data.columns:
             if col.startswith('asset_'):
