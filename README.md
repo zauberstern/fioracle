@@ -105,13 +105,19 @@ A gradient-boosted classifier predicts tomorrow's regime using today's features:
 
 **Historical Regime Detection**
 
-*The model correctly identifies crisis periods (red) during major market dislocations—GFC, COVID, rate shocks—while distinguishing calmer regimes (green) and inflationary episodes (yellow).*
+*CHF acts as a flight-to-quality asset—crisis regimes align with periods when investors seek Swiss Franc safety.*
 
 ![CHF Regime Timeline](output/figures/historical/regime_timeline_CHF.png)
 
+*US Treasuries show regime shifts during rate cycles—crisis periods match flight-to-quality rallies and rate shock selloffs.*
+
 ![US 10Y Treasury Regime Timeline](output/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
 
-![US Bond Aggregate Regime Timeline](output/figures/historical/regime_timeline_US_BOND_AGG.png)
+**Feature Importance**
+
+*Volatility (VIX) dominates regime prediction—market stress signals are the strongest leading indicator of regime transitions.*
+
+![Feature Importance](output/figures/test/xgb_diagnostics/aggregate_feature_importance.png)
 
 ### 3. Portfolio Optimization
 
