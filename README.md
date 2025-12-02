@@ -103,6 +103,16 @@ A gradient-boosted classifier predicts tomorrow's regime using today's features:
 - **Walk-forward architecture**: Models trained only on data available at each decision point
 - **No future information leakage**: Features computed with causal-only operations (e.g., trailing rolling windows, not centered)
 
+**Historical Regime Detection**
+
+*The model correctly identifies crisis periods (red) during major market dislocations—GFC, COVID, rate shocks—while distinguishing calmer regimes (green) and inflationary episodes (yellow).*
+
+![CHF Regime Timeline](output/figures/historical/regime_timeline_CHF.png)
+
+![US 10Y Treasury Regime Timeline](output/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
+
+![US Bond Aggregate Regime Timeline](output/figures/historical/regime_timeline_US_BOND_AGG.png)
+
 ### 3. Portfolio Optimization
 
 Three strategies execute regime-conditioned allocations:
