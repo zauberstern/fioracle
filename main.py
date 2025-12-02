@@ -226,22 +226,36 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
             log_with_timestamp("No risk-free rate found in ancillary data", 'WARNING')
             risk_free_rate = pd.Series(dtype=float, index=full_data.index)  # NaN series, not zeros
         
-        # Build EXCLUDED list from config
+        # Build INVESTABLE set from config (these ALWAYS take priority)
+        investable_assets = set()
+        for inv in config['assets'].get('investable', []):
+            inv_clean = inv.replace('.csv', '').replace('_TOTAL_RETURN', '').replace('_RETURN', '').upper()
+            investable_assets.add(inv_clean)
+            investable_assets.add(inv.replace('.csv', '').upper())
+        
+        # Build EXCLUDED list from config (but investable takes priority!)
         excluded_assets = set()
         for excl in config['assets'].get('excluded', []):
             excl_clean = excl.replace('.csv', '').replace('_TOTAL_RETURN', '').replace('_RETURN', '').upper()
-            excluded_assets.add(excl_clean)
-            excluded_assets.add(excl.replace('.csv', '').upper())
+            # Only add to excluded if NOT in investable list
+            if excl_clean not in investable_assets and excl.replace('.csv', '').upper() not in investable_assets:
+                excluded_assets.add(excl_clean)
+                excluded_assets.add(excl.replace('.csv', '').upper())
         
-        # NEVER include ancillary data as investable
-        excluded_assets.update({
+        # NEVER include ancillary data as investable (unless explicitly in investable)
+        ancillary_exclusions = {
             'SP500_TOTAL_RETURN', 'SP500',
             'US_RISK_FREE_RATE', 'RISK_FREE_RATE',
             'YIELD_2Y', 'YIELD_SLOPE',
             'ANCILLARY_SP500', 'ANCILLARY_RISK_FREE_RATE',
             'ANCILLARY_YIELD_2Y', 'ANCILLARY_YIELD_SLOPE',
-        })
+        }
+        # Only add ancillary exclusions if not in investable
+        for anc in ancillary_exclusions:
+            if anc not in investable_assets:
+                excluded_assets.add(anc)
         
+        log_with_timestamp(f"Investable assets from config: {sorted(investable_assets)}")
         log_with_timestamp(f"Excluded from portfolio: {sorted(excluded_assets)}")
         
         # Build returns DataFrame - ONLY asset_ columns (NOT ancillary_ or macro_)
@@ -258,12 +272,20 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
             # Clean asset name
             asset_name = col.replace('asset_', '').upper()
             
-            # Skip excluded assets
-            if asset_name in excluded_assets:
+            # PRIORITY CHECK: If asset is in investable list, INCLUDE it
+            # Otherwise, check if it's in excluded list
+            is_investable = asset_name in investable_assets
+            is_excluded = asset_name in excluded_assets
+            
+            if is_excluded and not is_investable:
+                # Only skip if excluded AND not explicitly investable
                 continue
             
             # Only include if we have features for this asset
             if asset_name in asset_features:
+                asset_returns[asset_name] = asset_return
+            elif is_investable:
+                # Even without features, include investable assets for returns
                 asset_returns[asset_name] = asset_return
         
         returns_df = pd.DataFrame(asset_returns)
@@ -293,8 +315,26 @@ def run_pipeline(config: dict, output_dir: Path) -> Dict:
     log_with_timestamp("STEP 4/6: Training Models on Training Data (NO Look-Ahead)")
     print("-" * 50)
     
+    # =========================================================================
+    # TEMPORAL BOUNDARIES - Explicit logging for audit transparency
+    # =========================================================================
     train_start = pd.Timestamp(config['data']['train_start'])
     train_end = pd.Timestamp(config['data']['train_end'])
+    val_start = pd.Timestamp(config['data']['val_start'])
+    val_end = pd.Timestamp(config['data']['val_end'])
+    test_start = pd.Timestamp(config['data']['test_start'])
+    test_end = pd.Timestamp(config['data']['test_end'])
+    
+    log_with_timestamp("TEMPORAL BOUNDARIES (No Look-Ahead Guarantee):")
+    log_with_timestamp(f"  TRAIN:      {train_start.date()} to {train_end.date()} (JM fitting, XGB training, λ tuning)")
+    log_with_timestamp(f"  VALIDATION: {val_start.date()} to {val_end.date()} (hyperparameter selection)")
+    log_with_timestamp(f"  TEST:       {test_start.date()} to {test_end.date()} (out-of-sample evaluation)")
+    if config.get('regimes', {}).get('rolling', {}).get('enabled', False):
+        rolling_cfg = config['regimes']['rolling']
+        log_with_timestamp(f"  WALK-FORWARD: {rolling_cfg.get('training_years', 10)}yr train, "
+                          f"{rolling_cfg.get('validation_years', 2)}yr val, "
+                          f"{rolling_cfg.get('update_frequency_months', 6)}mo updates")
+    print("-" * 50)
     
     # Filter training data
     train_mask = (returns_df.index >= train_start) & (returns_df.index <= train_end)
@@ -587,12 +627,21 @@ def run_split_with_trained_model(
     split_rf = risk_free_rate.loc[mask]
     
     # Filter asset features (exclude non-investable assets)
+    # Build investable set from config for priority checking
+    investable_set = set()
+    for inv in config.get('assets', {}).get('investable', []):
+        inv_clean = inv.replace('.csv', '').replace('_TOTAL_RETURN', '').replace('_RETURN', '').upper()
+        investable_set.add(inv_clean)
+        investable_set.add(inv.replace('.csv', '').upper())
+    
     if excluded_assets is None:
-        excluded_assets = {'SP500_TOTAL_RETURN', 'SP500', 'US_RISK_FREE_RATE', 'IBOXX_USD_LIQ_IG', 'IBOXX_USD_LIQ_HY'}
+        excluded_assets = {'SP500_TOTAL_RETURN', 'SP500', 'US_RISK_FREE_RATE'}
     
     split_asset_features = {}
     for asset_name, features in asset_features.items():
-        if asset_name in excluded_assets:
+        # Investable assets are NEVER excluded
+        is_investable = asset_name in investable_set
+        if asset_name in excluded_assets and not is_investable:
             continue
         split_feat = features.loc[mask]
         if len(split_feat.dropna()) > 50:  # Lower threshold for val/test
@@ -642,18 +691,24 @@ def run_split_with_trained_model(
                 
                 # Get predictions from trained classifier
                 model = regime_engine.classifiers[asset_name]
-                probs = model.predict_proba(X_pred.values)[:, 0]  # Prob of bullish
+                probs_all = model.predict_proba(X_pred.values)  # Shape: (n_samples, n_classes)
                 
-                # Apply smoothing
+                # Get number of states from config (default 3)
+                n_states = config.get('regimes', {}).get('jump_model', {}).get('n_states', 3)
+                
+                # Apply smoothing to full probability matrix
                 halflife = regime_engine.halflives.get(asset_name, 0)
                 if halflife > 0:
                     alpha = 1 - np.exp(-np.log(2) / halflife)
-                    probs_smooth = pd.Series(probs, index=X_pred.index).ewm(alpha=alpha, adjust=False).mean()
+                    probs_df = pd.DataFrame(probs_all, index=X_pred.index)
+                    probs_smooth = probs_df.ewm(alpha=alpha, adjust=False).mean()
                 else:
-                    probs_smooth = pd.Series(probs, index=X_pred.index)
+                    probs_smooth = pd.DataFrame(probs_all, index=X_pred.index)
                 
-                # Binary prediction
-                regimes_dict[asset_name] = (probs_smooth < 0.5).astype(int)  # <0.5 = bearish
+                # Use argmax for 3-state regimes (0=calm, 1=inflationary, 2=crisis)
+                # This preserves all 3 states instead of collapsing to binary
+                regimes_dict[asset_name] = probs_smooth.values.argmax(axis=1)
+                regimes_dict[asset_name] = pd.Series(regimes_dict[asset_name], index=X_pred.index)
                 
             except Exception as e:
                 log_with_timestamp(f"  {asset_name} prediction failed: {e}", 'WARNING')
@@ -668,21 +723,26 @@ def run_split_with_trained_model(
     # Save regime results
     regimes_df.to_csv(results_dir / 'asset_regimes.csv')
     
-    # Compute regime statistics
+    # Compute regime statistics (3-state: calm/inflationary/crisis)
     regime_stats = {}
+    n_states = config.get('regimes', {}).get('jump_model', {}).get('n_states', 3)
     for asset in regimes_df.columns:
         regimes = regimes_df[asset].dropna()
         if len(regimes) > 0:
-            n_bull = (regimes == 0).sum()
-            n_bear = (regimes == 1).sum()
+            n_calm = (regimes == 0).sum()          # Calm/Bullish
+            n_inflationary = (regimes == 1).sum()  # Inflationary/Neutral
+            n_crisis = (regimes == 2).sum()        # Crisis/Bearish
             n_switches = (regimes.diff() != 0).sum()
             
             regime_stats[asset] = {
-                'bull_days': int(n_bull),
-                'bear_days': int(n_bear),
-                'bull_pct': f"{n_bull/len(regimes)*100:.1f}%",
-                'bear_pct': f"{n_bear/len(regimes)*100:.1f}%",
-                'n_switches': int(n_switches)
+                'calm_days': int(n_calm),
+                'inflationary_days': int(n_inflationary),
+                'crisis_days': int(n_crisis),
+                'calm_pct': f"{n_calm/len(regimes)*100:.1f}%",
+                'inflationary_pct': f"{n_inflationary/len(regimes)*100:.1f}%",
+                'crisis_pct': f"{n_crisis/len(regimes)*100:.1f}%",
+                'n_switches': int(n_switches),
+                'n_states': n_states
             }
     
     with open(regime_stats_dir / 'regime_statistics.json', 'w') as f:
@@ -713,9 +773,16 @@ def run_split_with_trained_model(
                 max_weight=config['portfolio']['max_weight'],
                 covariance_halflife=config['portfolio'].get('covariance_halflife', 252),
                 lookback_years=TRAINING_YEARS,
+                bearish_return_cap=config['portfolio'].get('bearish_return_cap', -0.001),
+                bullish_return_minvar=config['portfolio'].get('bullish_return_minvar', 0.001),
                 strategy=strategy.upper(),
                 config=config
             )
+            
+            # Enable regime mixing by providing the regime engine and features
+            # This allows soft regime transitions using XGBoost probability outputs
+            if config.get('portfolio', {}).get('regime_mixing', {}).get('enabled', False):
+                portfolio_engine.set_regime_engine(regime_engine, split_asset_features)
             
             backtest_results = portfolio_engine.backtest(
                 returns_df=split_returns,
@@ -724,7 +791,8 @@ def run_split_with_trained_model(
                 start_date=start_ts,
                 end_date=end_ts,
                 verbose=True,
-                macro_features=split_macro  # For macro-conditioned mu in MV strategy
+                macro_features=split_macro,  # For macro-conditioned mu in MV strategy
+                risk_free_rate=split_rf  # For excess return calculation
             )
             
             all_portfolio_results[strategy] = backtest_results
@@ -926,11 +994,23 @@ def run_split_with_trained_model(
                     if len(X_full) < 100:
                         continue
                     
-                    # Get regimes
+                    # Get regimes - defensive handling for assets with incomplete data
                     if asset_name in regimes_df.columns:
-                        y_full = regimes_df[asset_name].reindex(X_full.index).dropna()
+                        regime_col = regimes_df[asset_name]
+                        # Ensure we have a Series, not DataFrame (can happen with duplicate columns)
+                        if isinstance(regime_col, pd.DataFrame):
+                            regime_col = regime_col.iloc[:, 0]
+                        y_full = regime_col.reindex(X_full.index).dropna()
+                        # Ensure y_full is 1D
+                        if hasattr(y_full, 'ndim') and y_full.ndim > 1:
+                            y_full = y_full.iloc[:, 0] if isinstance(y_full, pd.DataFrame) else pd.Series(y_full.ravel())
                         X_full = X_full.loc[y_full.index]
                     else:
+                        continue
+                    
+                    # Skip if insufficient data after regime alignment
+                    if len(y_full) < 100:
+                        log_with_timestamp(f"  Skipping {asset_name}: insufficient regime data ({len(y_full)} rows)", 'WARNING')
                         continue
                     
                     # Split

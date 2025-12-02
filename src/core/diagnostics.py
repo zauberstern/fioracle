@@ -1,8 +1,5 @@
 """
-XGBoost diagnostics, SHAP analysis, and macro-only baseline.
-
-Provides SHAP feature importance, VIX ablation tests, proper scoring rules,
-and conditional return analysis by predicted regime.
+XGBoost diagnostics and SHAP analysis.
 """
 
 import numpy as np
@@ -45,28 +42,18 @@ def compute_xgb_diagnostics(
     compute_shap: bool = True,
     prediction_horizon: int = 1
 ) -> Dict:
-    """
-    Compute comprehensive XGBoost diagnostics including SHAP.
-    
-    Args:
-        model: Trained XGBoost model
-        X_train, X_test: Feature DataFrames
-        y_train, y_test: Target Series
-        asset_name: Name for labeling
-        output_dir: Directory for saving plots
-        compute_shap: Whether to compute SHAP values
-        prediction_horizon: Days ahead for prediction (1=daily, 5=weekly, 21=monthly)
-    
-    Returns dict with feature importances, SHAP values, and scoring metrics.
-    """
+    """Compute feature importance, SHAP values, and accuracy metrics."""
     results = {
         'asset': asset_name,
         'prediction_horizon_days': prediction_horizon
     }
     
     # Predictions
-    y_pred_train = model.predict(X_train)
-    y_pred_test = model.predict(X_test)
+    y_pred_train_raw = model.predict(X_train)
+    y_pred_test_raw = model.predict(X_test)
+    # Some XGBoost versions may return 2D outputs for multiclass; reduce via argmax
+    y_pred_train = np.argmax(y_pred_train_raw, axis=1) if getattr(y_pred_train_raw, 'ndim', 1) == 2 else y_pred_train_raw
+    y_pred_test = np.argmax(y_pred_test_raw, axis=1) if getattr(y_pred_test_raw, 'ndim', 1) == 2 else y_pred_test_raw
     y_prob_train = model.predict_proba(X_train)
     y_prob_test = model.predict_proba(X_test)
     
@@ -75,31 +62,42 @@ def compute_xgb_diagnostics(
     n_classes = len(model_classes)
     n_test_classes = len(np.unique(y_test))
     
-    # Accuracy metrics
-    results['train_accuracy'] = float(accuracy_score(y_train, y_pred_train))
-    results['test_accuracy'] = float(accuracy_score(y_test, y_pred_test))
-    results['train_balanced_acc'] = float(balanced_accuracy_score(y_train, y_pred_train))
-    results['test_balanced_acc'] = float(balanced_accuracy_score(y_test, y_pred_test))
+    # Ensure y_test and y_train are 1D for metrics (fix SHAP shape bug)
+    if hasattr(y_test, 'ndim') and y_test.ndim > 1:
+        y_test_labels = np.argmax(y_test, axis=1)
+    else:
+        y_test_labels = np.ravel(y_test)
     
-    # F1 score - always use weighted for consistency with multi-class
-    results['test_f1'] = float(f1_score(y_test, y_pred_test, average='weighted', zero_division=0))
+    if hasattr(y_train, 'ndim') and y_train.ndim > 1:
+        y_train_labels = np.argmax(y_train, axis=1)
+    else:
+        y_train_labels = np.ravel(y_train)
+    
+    # Accuracy metrics (use flattened labels)
+    results['train_accuracy'] = float(accuracy_score(y_train_labels, y_pred_train))
+    results['test_accuracy'] = float(accuracy_score(y_test_labels, y_pred_test))
+    results['train_balanced_acc'] = float(balanced_accuracy_score(y_train_labels, y_pred_train))
+    results['test_balanced_acc'] = float(balanced_accuracy_score(y_test_labels, y_pred_test))
+    
+    # F1 score - use labels for consistency
+    results['test_f1'] = float(f1_score(y_test_labels, y_pred_test, average='weighted', zero_division=0))
     
     # Proper scoring rules - pass labels to handle class mismatch
     try:
         if n_classes == 2 and n_test_classes == 2:
-            results['test_brier_score'] = float(brier_score_loss(y_test, y_prob_test[:, 1]))
-            results['test_log_loss'] = float(log_loss(y_test, y_prob_test, labels=model_classes))
+            results['test_brier_score'] = float(brier_score_loss(y_test_labels, y_prob_test[:, 1]))
+            results['test_log_loss'] = float(log_loss(y_test_labels, y_prob_test, labels=model_classes))
         else:
             # Multi-class: average Brier score per class
             brier_total = 0.0
             valid_classes = 0
             for i, c in enumerate(model_classes):
-                y_binary = (y_test == c).astype(int)
+                y_binary = (y_test_labels == c).astype(int)
                 if y_binary.sum() > 0 and i < y_prob_test.shape[1]:
                     brier_total += brier_score_loss(y_binary, y_prob_test[:, i])
                     valid_classes += 1
             results['test_brier_score'] = float(brier_total / max(valid_classes, 1))
-            results['test_log_loss'] = float(log_loss(y_test, y_prob_test, labels=model_classes))
+            results['test_log_loss'] = float(log_loss(y_test_labels, y_prob_test, labels=model_classes))
     except Exception as e:
         results['test_brier_score'] = np.nan
         results['test_log_loss'] = np.nan
@@ -132,15 +130,25 @@ def compute_xgb_diagnostics(
             explainer = shap.TreeExplainer(model)
             
             # Use a sample if too many test points
-            X_shap = X_test.iloc[:min(500, len(X_test))]
+            X_shap = X_test.iloc[:min(500, len(X_test))].copy()
             shap_values = explainer.shap_values(X_shap)
             
-            # Mean absolute SHAP per feature
-            if isinstance(shap_values, list):
-                # Multi-class: average across classes
-                shap_mean = np.mean([np.abs(sv).mean(axis=0) for sv in shap_values], axis=0)
+            # Handle different SHAP return formats (varies by shap version)
+            # Modern SHAP may return Explanation objects
+            if hasattr(shap_values, 'values'):
+                shap_array = shap_values.values
+            elif isinstance(shap_values, list):
+                # Multi-class: list of arrays, one per class
+                shap_array = shap_values
             else:
-                shap_mean = np.abs(shap_values).mean(axis=0)
+                shap_array = shap_values
+            
+            # Mean absolute SHAP per feature
+            if isinstance(shap_array, list):
+                # Multi-class: average across classes
+                shap_mean = np.mean([np.abs(sv).mean(axis=0) for sv in shap_array], axis=0)
+            else:
+                shap_mean = np.abs(shap_array).mean(axis=0)
             
             shap_importance = pd.DataFrame({
                 'feature': X_shap.columns,
@@ -160,31 +168,45 @@ def compute_xgb_diagnostics(
                 ]['mean_abs_shap'].sum())
             }
             
-            # Save SHAP plots
+            # Save SHAP plots with proper matplotlib handling
             shap_dir = output_dir / 'shap'
             shap_dir.mkdir(parents=True, exist_ok=True)
             
-            # Summary plot (bar)
-            plt.figure(figsize=(12, 8))
-            if isinstance(shap_values, list):
-                shap.summary_plot(shap_values[0], X_shap, show=False, plot_size=(12, 8), plot_type='bar')
+            # Get SHAP values in correct format for plotting
+            if isinstance(shap_array, list):
+                plot_shap = shap_array[0]  # Use first class for visualization
             else:
-                shap.summary_plot(shap_values, X_shap, show=False, plot_size=(12, 8), plot_type='bar')
-            plt.title(f'SHAP Feature Importance: {asset_name}', fontsize=14, fontweight='bold')
-            plt.tight_layout()
-            plt.savefig(shap_dir / f'{asset_name}_shap_bar.png', dpi=150, bbox_inches='tight')
-            plt.close()
+                plot_shap = shap_array
             
-            # Summary plot (beeswarm)
-            plt.figure(figsize=(12, 8))
-            if isinstance(shap_values, list):
-                shap.summary_plot(shap_values[0], X_shap, show=False, plot_size=(12, 8))
-            else:
-                shap.summary_plot(shap_values, X_shap, show=False, plot_size=(12, 8))
-            plt.title(f'SHAP Summary: {asset_name}', fontsize=14, fontweight='bold')
-            plt.tight_layout()
-            plt.savefig(shap_dir / f'{asset_name}_shap_summary.png', dpi=150, bbox_inches='tight')
-            plt.close()
+            # Summary plot (bar) - use matplotlib directly for reliability
+            try:
+                fig, ax = plt.subplots(figsize=(12, 8))
+                # Sort features by importance
+                sorted_idx = np.argsort(np.abs(plot_shap).mean(axis=0))[::-1][:20]  # Top 20
+                feature_names = [X_shap.columns[i] for i in sorted_idx]
+                importance_vals = [np.abs(plot_shap[:, i]).mean() for i in sorted_idx]
+                
+                ax.barh(range(len(feature_names)), importance_vals[::-1], color='#1f77b4')
+                ax.set_yticks(range(len(feature_names)))
+                ax.set_yticklabels(feature_names[::-1], fontsize=9)
+                ax.set_xlabel('Mean |SHAP value|', fontsize=11)
+                ax.set_title(f'SHAP Feature Importance: {asset_name}', fontsize=14, fontweight='bold')
+                plt.tight_layout()
+                plt.savefig(shap_dir / f'{asset_name}_shap_bar.png', dpi=150, bbox_inches='tight')
+                plt.close(fig)
+            except Exception as bar_error:
+                results['shap_bar_plot_error'] = str(bar_error)
+            
+            # Summary plot (beeswarm) - wrap in try/except for robustness
+            try:
+                fig = plt.figure(figsize=(12, 8))
+                shap.summary_plot(plot_shap, X_shap, show=False, max_display=20)
+                plt.title(f'SHAP Summary: {asset_name}', fontsize=14, fontweight='bold')
+                plt.tight_layout()
+                plt.savefig(shap_dir / f'{asset_name}_shap_summary.png', dpi=150, bbox_inches='tight')
+                plt.close(fig)
+            except Exception as summary_error:
+                results['shap_summary_plot_error'] = str(summary_error)
             
             results['shap_plots_saved'] = True
             
@@ -202,17 +224,7 @@ def run_macro_only_baseline(
     exclude_vix: bool = True,
     macro_features_config: Optional[List[str]] = None
 ) -> Dict:
-    """
-    Run macro-only logistic regression baseline (VIX ablation).
-    
-    Args:
-        X_train, X_test: Full feature DataFrames
-        y_train, y_test: Target Series
-        exclude_vix: If True, excludes VIX features for ablation test
-        macro_features_config: List of specific macro features to use (from config)
-    
-    Returns dict with accuracy comparison to show VIX value.
-    """
+    """Run macro-only logistic baseline for VIX ablation."""
     # Select only macro features
     macro_cols = [c for c in X_train.columns if 'macro' in c.lower()]
     
@@ -247,9 +259,22 @@ def _run_logistic_baseline(
     y_test: pd.Series,
     feature_cols: List[str]
 ) -> Dict:
-    """Internal helper to run logistic regression baseline."""
+    """Fit logistic regression on the given features."""
     if len(feature_cols) == 0:
         return {'error': 'No features available'}
+    
+    # Defensive: ensure y_train and y_test are 1D
+    # This can happen if regimes_df returns a DataFrame instead of Series
+    if hasattr(y_train, 'ndim') and y_train.ndim > 1:
+        y_train = pd.Series(np.argmax(y_train.values, axis=1), index=y_train.index)
+    if hasattr(y_test, 'ndim') and y_test.ndim > 1:
+        y_test = pd.Series(np.argmax(y_test.values, axis=1), index=y_test.index)
+    
+    # Ensure we have Series (handles DataFrame with single column)
+    if isinstance(y_train, pd.DataFrame):
+        y_train = y_train.iloc[:, 0] if len(y_train.columns) == 1 else pd.Series(y_train.values.ravel(), index=y_train.index)
+    if isinstance(y_test, pd.DataFrame):
+        y_test = y_test.iloc[:, 0] if len(y_test.columns) == 1 else pd.Series(y_test.values.ravel(), index=y_test.index)
     
     X_train_filtered = X_train[feature_cols]
     X_test_filtered = X_test[feature_cols]
@@ -321,13 +346,7 @@ def _run_logistic_baseline(
 
 
 def compute_persistent_baseline(y_train: pd.Series, y_test: pd.Series) -> Dict:
-    """
-    Compute persistent-regime baseline.
-    
-    Two baselines:
-    1. Most frequent: Always predict most common training regime
-    2. Previous day: Predict same regime as previous day
-    """
+    """Most-frequent and previous-day baselines for regime prediction."""
     results = {}
     
     # Most frequent baseline
@@ -357,17 +376,7 @@ def compute_conditional_returns(
     regime_names: Dict[int, str] = None,
     horizon: int = 1
 ) -> Dict:
-    """
-    Compute average returns conditional on predicted regime.
-    
-    Args:
-        y_pred: Predicted regime series
-        returns: Asset return series
-        regime_names: Mapping of regime int to name (0: calm, 1: inflationary, 2: crisis)
-        horizon: Number of days ahead to measure returns
-    
-    For each predicted regime r, compute mean of next-horizon returns.
-    """
+    """Average forward returns by predicted regime."""
     if regime_names is None:
         regime_names = {0: 'calm', 1: 'inflationary', 2: 'crisis'}
     
@@ -416,15 +425,7 @@ def run_full_diagnostics(
     output_dir: Path,
     config: dict
 ) -> Dict:
-    """
-    Run comprehensive diagnostics for a single asset.
-    
-    Includes:
-    - XGBoost feature importance + SHAP
-    - Macro-only baseline (with/without VIX)
-    - Persistent baseline comparison
-    - Conditional returns by regime
-    """
+    """SHAP, baselines, and conditional return analysis for one asset."""
     results = {'asset': asset_name}
     
     diag_cfg = config.get('regimes', {}).get('diagnostics', {})
@@ -442,22 +443,21 @@ def run_full_diagnostics(
     horizon_cfg = config.get('regimes', {}).get('xgboost', {}).get('forecast_horizon', {})
     horizon = horizon_cfg.get('horizon_days', 1)
     
-    # XGBoost diagnostics
-    if diag_cfg.get('shap_plots', False):
-        xgb_diag = compute_xgb_diagnostics(
-            model=model,
-            X_train=X_train,
-            X_test=X_test,
-            y_train=y_train,
-            y_test=y_test,
-            asset_name=asset_name,
-            output_dir=output_dir,
-            compute_shap=True,
-            prediction_horizon=horizon
-        )
-        results['xgb_diagnostics'] = xgb_diag
+    # Always compute XGBoost diagnostics for accuracy metrics
+    xgb_diag = compute_xgb_diagnostics(
+        model=model,
+        X_train=X_train,
+        X_test=X_test,
+        y_train=y_train,
+        y_test=y_test,
+        asset_name=asset_name,
+        output_dir=output_dir if diag_cfg.get('shap_plots', False) else None,  # SHAP plots optional
+        compute_shap=diag_cfg.get('shap_plots', False),
+        prediction_horizon=horizon
+    )
+    results['xgb_diagnostics'] = xgb_diag
     
-    # Macro-only baseline (VIX ablation)
+    # Macro-only baseline (VIX ablation) - compare simple logistic vs XGBoost
     if diag_cfg.get('macro_baseline', False):
         macro_features = config.get('portfolio', {}).get('mu_model', {}).get('macro_features', [])
         macro_baseline = run_macro_only_baseline(
@@ -469,6 +469,16 @@ def run_full_diagnostics(
             macro_features_config=macro_features if macro_features else None
         )
         results['macro_baseline'] = macro_baseline
+        
+        # Add XGBoost vs macro-only comparison
+        if 'with_vix' in macro_baseline:
+            results['xgb_vs_macro'] = {
+                'xgb_accuracy': xgb_diag.get('test_accuracy', 0),
+                'macro_with_vix_accuracy': macro_baseline['with_vix'].get('accuracy', 0),
+                'macro_no_vix_accuracy': macro_baseline['without_vix'].get('accuracy', 0),
+                'xgb_advantage_vs_macro': xgb_diag.get('test_accuracy', 0) - macro_baseline['with_vix'].get('accuracy', 0),
+                'vix_contribution': macro_baseline['vix_value_added']['accuracy_delta']
+            }
     
     # Persistent baseline
     persistent = compute_persistent_baseline(y_train, y_test)
@@ -503,7 +513,7 @@ def save_diagnostics_summary(
     output_dir: Path,
     split_name: str
 ) -> None:
-    """Save diagnostics results to JSON."""
+    """Write diagnostics dict to JSON."""
     diag_dir = output_dir / 'diagnostics' / split_name
     diag_dir.mkdir(parents=True, exist_ok=True)
     
@@ -538,7 +548,7 @@ def plot_feature_importance_comparison(
     output_dir: Path,
     top_n: int = 15
 ) -> None:
-    """Plot aggregate feature importance across all assets."""
+    """Bar chart of average importance across all assets."""
     if not all_results:
         return
     

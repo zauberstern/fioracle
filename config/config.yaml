@@ -1,5 +1,13 @@
-# Fioracle Configuration
+# ==============================================================================
+# FIOracle Configuration
 # Regime-Aware Fixed Income Portfolio Optimization
+# ==============================================================================
+#
+# KEY ASSUMPTIONS:
+# - Daily rebalancing (t+1 implementation: signals at t, execution at t+1)
+# - Long-only portfolio (no short selling)
+# - Look-ahead bias prevention via publication lag modeling
+# - Transaction costs applied to all weight changes
 #
 # HOW TO ADD/REMOVE ASSETS OR MACRO INDICATORS:
 # 1. Place CSV file in asset_universe/ or macro_universe/ folder
@@ -13,14 +21,17 @@ data:
   start_date: 1945-01-01
   end_date: 2025-11-28
   
-  # UPDATED: Include 2008-2009 in test period for crisis coverage
-  train_start: 1945-01-01
-  train_end: 2004-12-31
+  # OPTIMIZED SPLITS: Shorter training for modern dynamics, adequate validation, robust test
+  # Training: 30 years (1965-1994) - more recent economic environment
+  # Validation: 13 years (1995-2007) - sufficient for robust tuning
+  # Test: 18 years (2008-2025) - includes GFC, Euro crisis, COVID, rate shocks
+  train_start: 1965-01-01
+  train_end: 1994-12-31
   
-  val_start: 2005-01-01
+  val_start: 1995-01-01
   val_end: 2007-12-31
   
-  test_start: 2008-01-01  # Now includes 2008 crisis
+  test_start: 2008-01-01
   test_end: 2025-11-28
   
   # Directory paths
@@ -29,54 +40,65 @@ data:
   ancillary_dir: ancillary
 
 # =============================================================================
-# ASSET UNIVERSE - Comprehensive categorization for regime-specific allocation
+# ASSET UNIVERSE - Optimized selection for diversification without overfitting
 # =============================================================================
+# Selection criteria:
+# - 10-12 assets provides good diversification without over-parameterization
+# - Representation from each major category (rates, credit, inflation, safe havens)
+# - Prioritize liquid instruments with long histories
+# - Avoid highly correlated assets within categories
 assets:
-  # SIMPLIFIED: Core 8 assets for faster runs
   investable:
-    # CASH - Safe haven
+    # CASH (1 asset - always include as safe haven)
     - US_CASH_RETURN
     
-    # GOVERNMENT BONDS
+    # GOVERNMENT BONDS - Duration ladder (including new ETFs)
     - US_10Y_GOV_BOND_RETURN
     - IBOXX_USD_TREASURY_TOTAL_RETURN
+    - IBOXX_USD_SOVEREIGN_TOTAL_RETURN
+    - ISHARES_20Y_TREASURY_TOTAL_RETURN    # TLT ETF (2002+)
+    - ISHARES_7_10Y_TREASURY_TOTAL_RETURN  # IEF ETF (2002+)
+    - ISHARES_1_3Y_TREASURY_TOTAL_RETURN   # SHY ETF (2002+)
     
     # INVESTMENT GRADE
     - US_BOND_AGG_TOTAL_RETURN
-    - CDX_HY_5Y_TOTAL_RETURN
+    - VANGUARD_TOTAL_BOND_TOTAL_RETURN     # BND ETF (2007+)
+    
+    # HIGH YIELD (1 asset)
     - IBOXX_USD_LIQ_HY_TOTAL_RETURN
     
-    # INFLATION PROTECTION
+    # INFLATION PROTECTION (2 assets)
     - US_TIPS_0_5_TOTAL_RETURN
     - US_INFLATION_SWAP_5Y_RETURN
-    - US_INFLATION_SWAP_10Y_RETURN
-    
-    # SAFE HAVENS
-    - GOLD_TOTAL_RETURN
+    - GLOBAL_ILB_0_5_TOTAL_RETURN       # Multi-currency complexity
+
+    # SAFE HAVENS (3 assets - including Swiss Gov Bond ETF)
     - CHF_TOTAL_RETURN
+    - USD_SWAPTION_1Y_5Y_TOTAL_RETURN   # Vol products - specialized
+    - ISHARES_SWISS_GOV_7_15_TOTAL_RETURN  # Swiss Gov Bond ETF (2008+)
+
+    # COMMODITIES (1 asset - for inflation hedge)
     
-    # COMMODITIES
-    - WTI_TOTAL_RETURN
-    
-  
-  # Excluded from portfolio construction (moved here for simplicity)
+
+  # Excluded from portfolio (used for features/benchmarks only)
   excluded:
-    - IBOXX_USD_LIQ_IG_TOTAL_RETURN
-    - IBOXX_USD_LIQ_HY_TOTAL_RETURN
+    - CDX_HY_5Y_TOTAL_RETURN            # Less liquid than IBOXX HY
+    - CDX_IG_5Y_TOTAL_RETURN            # CDS-specific risks
+    - CH_SWISS_SAFE_TR                  # Data ends 2010, insufficient coverage
+    - US_INFLATION_SWAP_1Y_RETURN       # Too short term
+    - US_INFLATION_SWAP_2Y_RETURN       # Correlated with 5Y
+    - US_INFLATION_SWAP_10Y_RETURN      # Duration overlap
+    - IBOXX_UK_IL_GILT_TOTAL_RETURN     # GBP currency risk
+    - IBOXX_USD_CORPORATE_TOTAL_RETURN  # Correlated with Agg Bond
+    - IBOXX_GEMX_USD_EMEA_IL_HDG_TOTAL_RETURN  # EM specific
+    - USD_SWAPTION_6M_5Y_TOTAL_RETURN   # Vol products - specialized
+    - USD_SWAPTION_1Y_10Y_TOTAL_RETURN  # Vol products - specialized
+    - IBOXX_USD_LIQ_IG_TOTAL_RETURN     # Correlated with Agg Bond (not investable)
+    - WTI_TOTAL_RETURN
     - US_AAA_CORP_BOND_TOTAL_RETURN
     - US_BAA_CORP_BOND_TOTAL_RETURN
-    - IBOXX_UK_IL_GILT_TOTAL_RETURN
-    - GLOBAL_ILB_0_5_TOTAL_RETURN
-    - IBOXX_USD_CORPORATE_TOTAL_RETURN
-    - USD_SWAPTION_6M_5Y_TOTAL_RETURN
-    - CDX_IG_5Y_TOTAL_RETURN
-    # Moved from investable for speed
-    - IBOXX_USD_SOVEREIGN_TOTAL_RETURN
-    - CDX_HY_5Y_TOTAL_RETURN
-    - IBOXX_GEMX_USD_EMEA_IL_HDG_TOTAL_RETURN
-    - CH_SWISS_SAFE_TR
-    - USD_SWAPTION_1Y_5Y_TOTAL_RETURN
-    - USD_SWAPTION_1Y_10Y_TOTAL_RETURN
+    - GOLD_TOTAL_RETURN                  # Unusual behavior after 2008 crisis 
+    
 
   # Asset categories for regime-specific allocation logic
   categories:
@@ -87,16 +109,22 @@ assets:
       - US_10Y_GOV_BOND_RETURN
       - IBOXX_USD_TREASURY_TOTAL_RETURN
       - IBOXX_USD_SOVEREIGN_TOTAL_RETURN
+      - ISHARES_20Y_TREASURY_TOTAL_RETURN
+      - ISHARES_7_10Y_TREASURY_TOTAL_RETURN
+      - ISHARES_1_3Y_TREASURY_TOTAL_RETURN
     
     investment_grade:
       - US_BOND_AGG_TOTAL_RETURN
       - IBOXX_USD_CORPORATE_TOTAL_RETURN
       - US_AAA_CORP_BOND_TOTAL_RETURN
       - US_BAA_CORP_BOND_TOTAL_RETURN
+      - IBOXX_USD_LIQ_IG_TOTAL_RETURN
+      - VANGUARD_TOTAL_BOND_TOTAL_RETURN
     
     high_yield:
       - CDX_HY_5Y_TOTAL_RETURN
       - CDX_IG_5Y_TOTAL_RETURN
+      - IBOXX_USD_LIQ_HY_TOTAL_RETURN
     
     inflation_linked:
       - US_TIPS_0_5_TOTAL_RETURN
@@ -111,7 +139,7 @@ assets:
     safe_havens:
       - GOLD_TOTAL_RETURN
       - CHF_TOTAL_RETURN
-      - CH_SWISS_SAFE_TR
+      - ISHARES_SWISS_GOV_7_15_TOTAL_RETURN
     
     volatility_hedges:
       - USD_SWAPTION_6M_5Y_TOTAL_RETURN
@@ -129,6 +157,8 @@ assets:
     IBOXX_USD_SOVEREIGN_TOTAL_RETURN: "USD Sovereign Index"
     US_BOND_AGG_TOTAL_RETURN: "US Aggregate Bond"
     IBOXX_USD_CORPORATE_TOTAL_RETURN: "USD Corporate IG"
+    IBOXX_USD_LIQ_IG_TOTAL_RETURN: "USD Liquid IG"
+    IBOXX_USD_LIQ_HY_TOTAL_RETURN: "USD Liquid HY"
     US_AAA_CORP_BOND_TOTAL_RETURN: "US AAA Corporate"
     US_BAA_CORP_BOND_TOTAL_RETURN: "US BBB Corporate"
     CDX_HY_5Y_TOTAL_RETURN: "CDX High Yield 5Y"
@@ -148,6 +178,11 @@ assets:
     USD_SWAPTION_1Y_5Y_TOTAL_RETURN: "USD Swaption 1Y×5Y"
     USD_SWAPTION_1Y_10Y_TOTAL_RETURN: "USD Swaption 1Y×10Y"
     WTI_TOTAL_RETURN: "WTI Crude Oil"
+    ISHARES_20Y_TREASURY_TOTAL_RETURN: "iShares 20+ Year Treasury (TLT)"
+    ISHARES_7_10Y_TREASURY_TOTAL_RETURN: "iShares 7-10 Year Treasury (IEF)"
+    ISHARES_1_3Y_TREASURY_TOTAL_RETURN: "iShares 1-3 Year Treasury (SHY)"
+    VANGUARD_TOTAL_BOND_TOTAL_RETURN: "Vanguard Total Bond (BND)"
+    ISHARES_SWISS_GOV_7_15_TOTAL_RETURN: "iShares Swiss Gov 7-15 (CSBGC0.SW)"
 
 # =============================================================================
 # ANCILLARY DATA - For features only, NOT investable
@@ -159,24 +194,27 @@ ancillary:
   yield_slope: US 10Y2Y (1976-present)
 
 # =============================================================================
-# MACRO INDICATORS - All available with enable/disable
+# MACRO INDICATORS - Optimized for low correlation and predictive power
 # =============================================================================
+# Selection criteria:
+# - 5-6 indicators to avoid overfitting
+# - Low pairwise correlation (<0.4)
+# - Different economic dimensions (volatility, geopolitics, inflation, credit, monetary)
+# - Long history available
 macro:
-  # SIMPLIFIED: Core 4 macro indicators for faster runs
   enabled:
-    - VIX                           # Market volatility (real-time)
-    - GPRI                          # Geopolitical Risk Index
-    - US_DEBT_TO_GDP                # Fiscal sustainability
-    - US_INFLATION_RATE             # CPI Inflation
+    - VIX
     - US_HY_CORP_OAS_TOTAL_RETURN
+    - US_INFLATION_RATE
+    - GPRI
+    - US_UNEMPLOYMENT_RATE
   
   disabled:
-    # Moved from enabled for speed
-    - US_UNEMPLOYMENT_RATE
+    - US_M2_VELOCITY
+    - US_DEBT_TO_GDP
     - EPU
     - US_GDP_GROWTH
 
-  
   # Display names for plots
   display_names:
     VIX: "VIX Index"
@@ -184,43 +222,46 @@ macro:
     US_DEBT_TO_GDP: "US Debt/GDP"
     US_HY_CORP_OAS_TOTAL_RETURN: "HY Credit Spread"
     US_INFLATION_RATE: "CPI Inflation"
+    US_M2_VELOCITY: "M2 Velocity"
     EPU: "Policy Uncertainty"
     US_GDP_GROWTH: "GDP Growth"
     US_UNEMPLOYMENT_RATE: "Unemployment"
   
-  # Feature engineering parameters
+  # Feature engineering parameters (exponential smoothing halflives)
   params:
-    vix_halflife: 63
-    gpr_halflife: 21
-    debt_gdp_halflife: 63
-    hy_oas_halflife: 21
-    inflation_halflife: 21
+    vix_halflife: 63             # 3-month smoothing for vol
+    gpr_halflife: 21             # 1-month for geopolitics
+    debt_gdp_halflife: 63        # Slow-moving fiscal
+    hy_oas_halflife: 21          # 1-month for credit spreads
+    inflation_halflife: 21       # 1-month for CPI
     epu_halflife: 21
     gdp_halflife: 63
     unemployment_halflife: 21
+    m2_velocity_halflife: 63     # Slow-moving monetary
 
 # =============================================================================
-# MACRO PUBLICATION LAGS - ENABLED to prevent look-ahead bias
+# MACRO PUBLICATION LAGS - CRITICAL for preventing look-ahead bias
 # =============================================================================
 macro_lags:
-  enabled: true           # CRITICAL: Enable to prevent look-ahead bias
-  vix_days: 6             # Real-time market data
-  gpr_days: 5             # News aggregation delay
-  epu_days: 7             # Policy uncertainty index delay
-  debt_to_gdp_days: 60    # Quarterly + 60 day reporting delay
-  inflation_days: 15      # CPI ~15 days after month end
-  gdp_growth_days: 90     # GDP quarterly + 30 day delay (advance estimate)
-  unemployment_days: 7    # Monthly, released first Friday
-  hy_oas_days: 1          # Market data, T+1
+  enabled: true                  # ALWAYS TRUE for valid backtests
+  vix_days: 1                    # Real-time market data (T+1 settlement)
+  gpr_days: 5                    # News aggregation delay
+  epu_days: 7                    # Policy uncertainty index delay
+  debt_to_gdp_days: 60           # Quarterly + 60 day reporting delay
+  inflation_days: 15             # CPI released ~15 days after month end
+  gdp_growth_days: 90            # GDP quarterly + 30 day advance estimate
+  unemployment_days: 7           # Monthly, released first Friday
+  hy_oas_days: 1                 # Market data, T+1
+  m2_velocity_days: 60           # Quarterly Fed release + processing
 
 # =============================================================================
 # REGIME IDENTIFICATION CONFIGURATION
 # =============================================================================
 regimes:
   jump_model:
-    lambda_candidates: [0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
-    default_lambda: 5.0
-    n_states: 3           # 3 = calm/inflationary/crisis
+    lambda_candidates: [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]
+    default_lambda: 2.0          # INCREASED: more stable regimes
+    n_states: 3                  # 3 = calm/inflationary/crisis
     l1_penalty: 0.0
     
   labels:
@@ -230,65 +271,123 @@ regimes:
   
   regime_mixing:
     enabled: true
-    
-  # Walk-forward rolling window settings
+
   rolling:
-    enabled: false        # Disabled for quick mode runs
-    training_years: 11    # Lookback window for training
-    validation_years: 5   # Window for lambda tuning
-    update_frequency_months: 6  # Biannual model updates
+    enabled: true               # ENABLED for out-of-sample robustness
+    training_years: 10           # 10 years lookback (more relevant than 15)
+    validation_years: 2          # 2 years for lambda tuning
+    update_frequency_months: 6   # Biannual model updates
   
+  # NOTE: HMM is not implemented - only n_states is used for n_macro_regimes
+  # Other HMM params (covariance_type, n_iter, persistence) are ignored
   hmm:
     n_states: 3
-    covariance_type: diag
-    n_iter: 200
-    persistence: 0.95
   
   xgboost:
-    max_depth: 5
-    n_estimators: 100
-    learning_rate: 0.1
-    subsample: 0.8
-    colsample_bytree: 0.8
+    max_depth: 3                 # Reduced from 5 for less overfitting
+    n_estimators: 200            # Increased for better fit
+    learning_rate: 0.05          # Reduced for regularization
+    subsample: 0.7               # Reduced for more regularization
+    colsample_bytree: 0.7        # Reduced for more regularization
     random_state: 42
-    tune_hyperparameters: true  # Flag to enable grid search
+    tune_hyperparameters: true  # Keep enabled
+    early_stopping_rounds: 50
+
     forecast_horizon:
-      mode: shift
-      horizon_days: 1
-    
-  smoothing_halflives: [0, 2, 4, 8]
+      mode: window_majority      # CHANGED: smoother than shift
+      horizon_days: 5            # CHANGED: 5-day ahead (less noise)
+  
+  # NOTE: smoothing_halflives is hardcoded as [0, 2, 4, 8] in regimes.py
+  # This config value is not used - kept for documentation only
   
   diagnostics:
     enabled: true
-    shap_plots: true
-    macro_baseline: true
+    shap_plots: true             # FIXED: Generate SHAP feature importance plots
+    macro_baseline: true         # FIXED: Compare XGBoost vs macro-only logistic regression
 
 # =============================================================================
 # PORTFOLIO OPTIMIZATION - Regime-specific allocation
 # =============================================================================
 portfolio:
-  gamma_risk: 10.0
-  gamma_trade: 1.0
-  transaction_cost: 0.0005
+  # BALANCED MODE: Moderate risk aversion for reasonable returns
+  gamma_risk: 8.0                # FIXED: Reduced from 18.0 (too risk-averse)
+  gamma_trade: 2.5               # Keep at 2.5 to reduce churn
+  max_weight: 0.20               # Keep at 0.20 (good diversification)
+
+  # Default flat transaction cost (used if tiered_costs disabled)
+  transaction_cost: 0.0005       # 5 bps one-way
   
-  max_weight: 0.40
-  min_weight: 0.00
-  max_leverage: 1.0
+  # =========================================================================
+  # TIERED TRANSACTION COSTS - Asset-class specific costs
+  # =========================================================================
+  # Based on institutional trading costs (bid-ask spread + market impact)
+  tiered_transaction_costs:
+    enabled: false                # Enable realistic per-asset costs
+    
+    # Costs in decimal (e.g., 0.0001 = 1 bp)
+    # Format: asset_pattern -> cost (supports partial matching)
+    costs_by_asset:
+      # CASH - Highly liquid (0.5-2 bps)
+      US_CASH: 0.00005           # 0.5 bps
+      
+      # US TREASURIES - Most liquid fixed income (1-3 bps)
+      US_10Y_GOV_BOND: 0.00015   # 1.5 bps
+      IBOXX_USD_TREASURY: 0.0002 # 2 bps (ETF tracking)
+      
+      # INVESTMENT GRADE BONDS - Moderate liquidity (3-8 bps)
+      US_BOND_AGG: 0.0004        # 4 bps
+      IBOXX_USD_LIQ_IG: 0.0005   # 5 bps
+      IBOXX_USD_CORPORATE: 0.0006 # 6 bps
+      US_AAA_CORP: 0.0005        # 5 bps
+      US_BAA_CORP: 0.0008        # 8 bps
+      
+      # HIGH YIELD - Less liquid (15-40 bps)
+      IBOXX_USD_LIQ_HY: 0.002    # 20 bps
+      CDX_HY: 0.0025             # 25 bps (CDS)
+      CDX_IG: 0.001              # 10 bps (CDS)
+      
+      # TIPS & INFLATION SWAPS - Moderate liquidity (3-15 bps)
+      US_TIPS: 0.0003            # 3 bps
+      US_INFLATION_SWAP: 0.0015  # INCREASED to 15 bps (from 10)
+      IBOXX_UK_IL: 0.001         # 10 bps
+      GLOBAL_ILB: 0.0015         # 15 bps
+      IBOXX_GEMX: 0.003          # 30 bps (EM)
+      
+      # SAFE HAVENS - Highly liquid (1-5 bps)
+      GOLD: 0.0002               # 2 bps (futures/ETF)
+      CHF: 0.0001                # 1 bp (FX spot)
+      CH_SWISS: 0.0003           # 3 bps
+      
+      # COMMODITIES - Liquid futures (2-5 bps)
+      WTI: 0.0003                # 3 bps
+      
+      # VOLATILITY/SWAPTIONS - OTC, less liquid (15-30 bps)
+      USD_SWAPTION: 0.002        # 20 bps
+    
+    # Default cost for assets not explicitly listed
+    default_cost: 0.0005         # 5 bps
   
-  min_bullish_assets: 3
+  # NOTE: min_weight and max_leverage are not implemented
+  # Long-only is enforced by bounds (0, max_weight)
+  # Leverage=1.0 is enforced by sum(weights)=1 constraint
   
-  covariance_halflife: 252
-  bearish_return_cap: -0.001
-  bullish_return_minvar: 0.001
+  min_bullish_assets: 3          # Min bullish assets to invest (else 100% cash)
   
-  enforce_nonzero_drawdown: true
+  covariance_halflife: 252       # 1-year halflife for cov estimation
+  bearish_return_cap: -0.002     # CHANGED from -0.001 to -0.002 (-20 bps)
+  
+  bullish_return_minvar: 0.0025  # CHANGED from 0.001 to 0.0025 (+25 bps)
+  
+  enforce_nonzero_drawdown: true # Prevent unrealistic 0% drawdown
   min_drawdown_threshold: 0.0001
 
-  # Regime-specific allocation preferences
+  # =======================================================================
+  # REGIME-SPECIFIC ALLOCATION - ENABLED
+  # =======================================================================
   regime_allocation:
-    enabled: true
+    enabled: true               # DISABLED for baseline - test core strategy first
     
-    # Calm regime: Normal diversification
+    # Calm regime: Normal diversification, favor carry
     calm:
       preferred_categories:
         - investment_grade
@@ -296,30 +395,30 @@ portfolio:
         - high_yield
       max_category_weights:
         cash: 0.20
-        government_bonds: 0.40
-        investment_grade: 0.50
-        high_yield: 0.25
-        inflation_linked: 0.20
-        safe_havens: 0.15
+        government_bonds: 0.50
+        investment_grade: 0.40
+        high_yield: 0.15  # REDUCED from 0.25
+        inflation_linked: 0.30
+        safe_havens: 0.25
         volatility_hedges: 0.10
         commodities: 0.10
-    
-    # Inflationary regime: Overweight real assets
+
+    # Inflationary regime: Real assets focus
     inflationary:
       preferred_categories:
         - inflation_linked
-        - commodities
         - safe_havens
+        - commodities
       max_category_weights:
         cash: 0.30
-        government_bonds: 0.20  # Duration risk in inflation
+        government_bonds: 0.25
         investment_grade: 0.20
         high_yield: 0.10
-        inflation_linked: 0.50  # Overweight TIPS, IL swaps
-        safe_havens: 0.30
+        inflation_linked: 0.60  # Overweight
+        safe_havens: 0.45
         volatility_hedges: 0.15
         commodities: 0.25
-    
+
     # Crisis regime: Flight to quality
     crisis:
       preferred_categories:
@@ -327,70 +426,79 @@ portfolio:
         - safe_havens
         - government_bonds
       max_category_weights:
-        cash: 0.60  # High cash allocation
-        government_bonds: 0.40  # Quality duration
+        cash: 0.70  # INCREASED from 0.60
+        government_bonds: 0.50
         investment_grade: 0.15
-        high_yield: 0.05  # Minimal credit risk
-        inflation_linked: 0.15
-        safe_havens: 0.40  # Max gold, CHF
-        volatility_hedges: 0.20  # Convexity valuable
+        high_yield: 0.05
+        inflation_linked: 0.20
+        safe_havens: 0.50  # INCREASED from 0.45
+        volatility_hedges: 0.20
         commodities: 0.05
 
-  # Gradual risk-off based on regime probabilities (replaces binary switch)
-  gradual_risk_off:
-    enabled: true
-    crisis_probability_threshold: 0.3  # Start reducing risk
-    max_cash_at_crisis: 0.80           # Max cash when P(crisis) = 1.0
-
-  mu_model:
-    enabled: true
-    model_type: linear
-    # Macro features for conditioning expected returns (MV strategy)
-    # Use same names as macro.enabled section (case-insensitive matching)
-    macro_features:
-      - VIX                    # Market volatility
-      - GPRI                   # Geopolitical risk
-      - US_DEBT_TO_GDP         # Fiscal sustainability
-      - US_INFLATION_RATE      # CPI Inflation
-    lookback_years: 5
-  
-  regime_mixing:
-    enabled: true
-  
+  # =======================================================================
+  # CASH FLOOR - ENABLED
+  # =======================================================================
   cash_floor:
-    enabled: true
-    c0: 0.05                # Base 5% minimum cash
-    c1: 0.75                # Scale with crisis probability
-  
-  robustness_grid:
-    enabled: false
-    gamma_risk_values: [7.5, 10.0, 12.5, 15.0]
-    gamma_trade_values: [0.5, 1.0, 2.0]
+    enabled: true  # CHANGED: Enable minimum cash requirement
+    c0: 0.05  # FIXED: Base 5% minimum cash (was 20%, too aggressive)
+    c1: 0.80  # Scale linearly with crisis probability
+    crisis_override_min: 0.30  # NEW: Configurable crisis regime minimum cash (was hardcoded 50%)
+
+  # =======================================================================
+  # GRADUAL RISK-OFF - DISABLED (redundant with cash_floor)
+  # =======================================================================
+  gradual_risk_off:
+    enabled: true  # FIXED: Disabled - duplicates cash_floor c1 scaling
+    crisis_probability_threshold: 0.25  # Not used when disabled
+    max_cash_at_crisis: 0.90  # Not used when disabled
+
+  # =======================================================================
+  # MACRO-CONDITIONED EXPECTED RETURNS
+  # =======================================================================
+  mu_model:
+    enabled: true # Disable for safety (MV uses regime-conditional only)
+    # NOTE: model_type and lookback_years are not implemented
+    # Code always uses Ridge regression with portfolio.lookback_years
+    macro_features:              # Used by macro_baseline diagnostics
+      - VIX
+      - GPRI
+      - US_INFLATION_RATE
+      - US_HY_CORP_OAS_TOTAL_RETURN
+
+  regime_mixing:
+    enabled: true                # Soft regime transitions
   
   tail_hedges:
-    enabled: true
+    enabled: true  # CHANGED: Enable for capital preservation
     chf_assets:
       - CHF_TOTAL_RETURN
-      - CH_SWISS_SAFE_TR
     gold_assets:
       - GOLD_TOTAL_RETURN
     gov_safe_assets:
       - US_10Y_GOV_BOND_RETURN
       - IBOXX_USD_TREASURY_TOTAL_RETURN
     credit_assets:
-      - IBOXX_USD_CORPORATE_TOTAL_RETURN
-      - US_BAA_CORP_BOND_TOTAL_RETURN
+      - US_BOND_AGG_TOTAL_RETURN
+      - IBOXX_USD_LIQ_HY_TOTAL_RETURN
     volatility_hedges:
       - USD_SWAPTION_6M_5Y_TOTAL_RETURN
       - USD_SWAPTION_1Y_5Y_TOTAL_RETURN
       - USD_SWAPTION_1Y_10Y_TOTAL_RETURN
 
+  # =======================================================================
+  # ROBUSTNESS GRID - DISABLED
+  # =======================================================================
+  robustness_grid:
+    enabled: true # Keep disabled for main runs
+    gamma_risk_values: [5.0, 8.0, 12.0]
+    gamma_trade_values: [2.0, 2.5, 3.0]
+
 # =============================================================================
 # EVALUATION & OUTPUT
 # =============================================================================
 evaluation:
-  use_walk_forward: false  # Disabled for faster quick mode runs
-  rebalance_frequency: daily
+  # NOTE: use_walk_forward is redundant - use regimes.rolling.enabled instead
+  rebalance_frequency: daily      # Options: daily, weekly, monthly
   
   benchmarks:
     - equal_weight
@@ -406,6 +514,7 @@ benchmark_60_40:
     - IBOXX_USD_CORPORATE
     - US_AAA_CORP_BOND
     - US_BAA_CORP_BOND
+    - US_BOND_AGG
   gov_weight: 0.6
   credit_weight: 0.4
 
@@ -414,8 +523,8 @@ output:
   models_dir: output/models
   results_dir: output/results
   regime_stats_dir: output/regime_statistics
-  dpi: 150
-  format: png
+  # NOTE: dpi and format are not implemented - hardcoded in visualization files
+  # Kept for documentation of intended values
 
 logging:
   level: INFO

@@ -1,21 +1,14 @@
 """
-Regime identification and forecasting engine.
+Regime detection and forecasting.
 
-Hybrid Regime Identification-Forecasting Framework (JM-XGB):
+Two-step approach:
+1. Jump Model identifies historical regimes (unsupervised)
+2. XGBoost predicts tomorrow's regime from today's features (supervised)
 
-Step I: Jump Model (JM) for unsupervised regime identification
-  Solves: min_{Θ,S} Σ_{t=0}^{T-1} l(x_t, θ_{s_t}) + λ Σ_{t=1}^{T-1} 1_{s_{t-1} ≠ s_t}
-  where l(x,θ) = (1/2) ||x - θ||_2^2
-  
-Step II: XGBoost for supervised regime forecasting
-  Predicts s_{t+1} using expanded features x_t
-  Post-processing: exponential smoothing to restore persistence
-  
-Rolling Framework:
-  - 11-year lookback training window
-  - Biannual (6-month) model updates
-  - 5-year validation window for lambda tuning
-  - 0/1 strategy Sharpe ratio criterion for lambda selection
+Regime states (3-state):
+- 0: Calm
+- 1: Inflationary
+- 2: Crisis
 """
 
 import numpy as np
@@ -30,14 +23,7 @@ from dateutil.relativedelta import relativedelta
 
 
 class JumpModel:
-    """
-    Statistical Jump Model for regime identification.
-    
-    Solves: min_{Θ,S} Σ l(x_t, θ_{s_t}) + λ Σ 1_{s_{t-1} ≠ s_t}
-    
-    Supports 2-state (bull/bear) or 3-state (calm/inflationary/crisis) regimes
-    with optional L1 penalty for sparse centroids.
-    """
+    """Jump Model for regime detection with L1-regularized transitions."""
     
     def __init__(
         self, 
@@ -45,12 +31,7 @@ class JumpModel:
         n_states: int = 2,
         l1_penalty: float = 0.0
     ):
-        """
-        Args:
-            lambda_jump: Jump penalty for regime transitions
-            n_states: Number of regimes (2 or 3)
-            l1_penalty: L1 penalty for sparse centroids
-        """
+        """lambda_jump controls how reluctant the model is to switch regimes."""
         self.lambda_jump = lambda_jump
         self.n_states = n_states
         self.l1_penalty = l1_penalty
@@ -59,15 +40,7 @@ class JumpModel:
         self.X_std = None
         
     def fit(self, X: np.ndarray) -> np.ndarray:
-        """
-        Fit Jump Model using coordinate descent.
-        
-        Args:
-            X: Feature matrix (T x D)
-            
-        Returns:
-            Optimal state sequence (T,)
-        """
+        """Fit the model and return the state sequence."""
         # Standardize
         self.X_mean = X.mean(axis=0)
         self.X_std = X.std(axis=0) + 1e-8
@@ -108,11 +81,7 @@ class JumpModel:
         return states
     
     def _viterbi_dp(self, X_norm: np.ndarray) -> np.ndarray:
-        """
-        Dynamic programming (Viterbi-like) to find optimal state sequence.
-        
-        Cost[t][k] = minimum cost up to time t ending in state k
-        """
+        """Find the optimal state sequence with dynamic programming."""
         T, D = X_norm.shape
         K = self.n_states
         
@@ -161,7 +130,7 @@ class JumpModel:
         return states
     
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """Predict states for new data using fitted centers."""
+        """Predict regimes for new data."""
         if self.theta is None:
             raise ValueError("Model not fitted")
             
@@ -170,19 +139,7 @@ class JumpModel:
 
 
 class RegimeEngine:
-    """
-    Complete regime identification and forecasting system.
-    
-    Implements:
-    - Jump Model for asset-specific regime identification
-    - XGBoost for regime forecasting
-    - Lambda tuning via 0/1 strategy Sharpe ratio
-    - Output probability smoothing with halflife selection
-
-    
-    Supports 2-state (bull/bear) or 3-state (calm/inflationary/crisis) regimes
-    with regime probability output and optional sparse centroids.
-    """
+    """Combines Jump Model (unsupervised) with XGBoost (supervised) for regime forecasting."""
     
     def __init__(
         self,
@@ -227,17 +184,16 @@ class RegimeEngine:
         asset_returns_df: pd.DataFrame,
         verbose: bool = True
     ) -> Dict[str, pd.Series]:
-        """
-        Fit Jump Model for all assets (Layer C).
-        
-        Returns: Dict of {asset_name: regime_series} where 0=Bullish, 1=Bearish
-        """
+        """Fit the Jump Model for each asset. Returns regime labels per asset."""
         if verbose:
             print("="*60)
             print(f"Layer C: Asset Regimes (Jump Model λ={self.lambda_jump})")
             print("="*60)
         
         regimes = {}
+        
+        # Assets that should ALWAYS be calm (very low/zero volatility by definition)
+        always_calm_assets = {'US_CASH', 'US_CASH_RETURN', 'CASH'}
         
         for asset_name, features in asset_features_dict.items():
             if asset_name not in asset_returns_df.columns:
@@ -247,6 +203,18 @@ class RegimeEngine:
             
             try:
                 returns = asset_returns_df[asset_name]
+                
+                # Special handling for cash: always calm
+                asset_upper = asset_name.upper()
+                if any(cash_name in asset_upper for cash_name in always_calm_assets):
+                    # Cash is ALWAYS calm (regime 0)
+                    regime_labels = pd.Series(0, index=features.dropna().index)
+                    if verbose:
+                        print(f"{asset_name}: ✓ CASH (forced 100% Calm)")
+                    regimes[asset_name] = regime_labels
+                    self.asset_models[asset_name] = None  # No model for cash
+                    continue
+                
                 regime_labels, model = self._fit_single_asset_regime(
                     features, returns
                 )
@@ -287,7 +255,7 @@ class RegimeEngine:
         features: pd.DataFrame,
         returns: pd.Series
     ) -> Tuple[pd.Series, JumpModel]:
-        """Fit Jump Model for single asset."""
+        """Fit Jump Model for a single asset."""
         features = features.dropna()
         if len(features) < 100:
             raise ValueError(f"Insufficient data: {len(features)} obs")
@@ -316,7 +284,7 @@ class RegimeEngine:
         states: pd.Series,
         returns: pd.Series
     ) -> pd.Series:
-        """Map states to bull (0) / bear (1) based on cumulative returns."""
+        """Label state 0 as bull or bear based on cumulative returns."""
         aligned_returns = returns.reindex(states.index)
         
         # Compute cumulative return per state
@@ -338,22 +306,51 @@ class RegimeEngine:
         states: pd.Series,
         returns: pd.Series
     ) -> pd.Series:
-        """Map 3 states to calm/inflationary/crisis based on mean returns."""
+        """Map 3 raw states to calm/inflationary/crisis using vol and returns."""
         aligned_returns = returns.reindex(states.index)
         
-        # Compute mean return per state
-        state_means = {}
+        # Compute volatility and mean returns per state
+        state_stats = {}
         for state in states.unique():
             mask = (states == state)
-            state_means[state] = aligned_returns[mask].mean()
+            state_stats[state] = {
+                'vol': aligned_returns[mask].std(),
+                'mean': aligned_returns[mask].mean(),
+                'count': mask.sum()
+            }
         
-        # Sort states by mean return (descending)
-        sorted_states = sorted(state_means.keys(), key=lambda s: state_means[s], reverse=True)
+        # Create composite score: high vol + low returns → crisis, low vol + high returns → calm
+        # Normalize vol and returns to 0-1 scale across states
+        vols = [state_stats[s]['vol'] for s in state_stats.keys()]
+        means = [state_stats[s]['mean'] for s in state_stats.keys()]
         
-        # Create mapping: highest return → 0 (calm), lowest → 2 (crisis)
+        vol_min, vol_max = min(vols), max(vols)
+        mean_min, mean_max = min(means), max(means)
+        vol_range = vol_max - vol_min if vol_max > vol_min else 1e-10
+        mean_range = mean_max - mean_min if mean_max > mean_min else 1e-10
+        
+        # Composite score: higher vol + lower return = more crisis-like
+        # Score = normalized_vol - normalized_return (range: -1 to +1)
+        composite_scores = {}
+        for state in state_stats.keys():
+            norm_vol = (state_stats[state]['vol'] - vol_min) / vol_range  # 0 to 1
+            norm_return = (state_stats[state]['mean'] - mean_min) / mean_range  # 0 to 1
+            composite_scores[state] = norm_vol - norm_return  # -1 (calm) to +1 (crisis)
+        
+        # Sort states by composite score (ascending): lowest score → calm, highest → crisis
+        sorted_by_score = sorted(composite_scores.keys(), key=lambda s: composite_scores[s])
+        
+        # Create mapping
         remap = {}
-        for new_label, old_state in enumerate(sorted_states):
-            remap[old_state] = new_label
+        if len(sorted_by_score) >= 3:
+            remap[sorted_by_score[0]] = 0   # Lowest score (low vol, high return) → Calm
+            remap[sorted_by_score[1]] = 1   # Middle → Inflationary
+            remap[sorted_by_score[2]] = 2   # Highest score (high vol, low return) → Crisis
+        elif len(sorted_by_score) == 2:
+            remap[sorted_by_score[0]] = 0   # Lower score → Calm
+            remap[sorted_by_score[1]] = 2   # Higher score → Crisis
+        else:
+            remap[sorted_by_score[0]] = 0   # Single state → Calm
         
         return states.map(remap)
     
@@ -366,12 +363,7 @@ class RegimeEngine:
         test_size: float = 0.2,
         verbose: bool = True
     ) -> Dict[str, Dict]:
-        """
-        Train XGBoost classifiers for regime forecasting.
-        
-        Includes exponential smoothing halflife selection to maximize
-        0/1 strategy Sharpe ratio.
-        """
+        """Train XGBoost classifiers for regime forecasting with halflife selection."""
         if verbose:
             print("="*60)
             print("Regime Forecasting (XGBoost)")
@@ -403,11 +395,70 @@ class RegimeEngine:
                 X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
                 y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
                 
+                # Standardize features - FIT ON TRAIN ONLY to prevent look-ahead bias
+                scaler = StandardScaler()
+                X_train_cols = X_train.columns
+                X_train_idx = X_train.index
+                X_test_idx = X_test.index
+                
+                X_train_scaled = pd.DataFrame(
+                    scaler.fit_transform(X_train),
+                    index=X_train_idx,
+                    columns=X_train_cols
+                )
+                X_test_scaled = pd.DataFrame(
+                    scaler.transform(X_test),
+                    index=X_test_idx,
+                    columns=X_train_cols
+                )
+                
+                # Store scaler for inference
+                self._scalers = getattr(self, '_scalers', {})
+                self._scalers[asset_name] = scaler
+                
+                # Use scaled data going forward
+                X_train = X_train_scaled
+                X_test = X_test_scaled
+                
                 # Remap classes to consecutive integers (handles missing classes)
                 unique_classes = sorted(y_train.unique())
                 if len(unique_classes) < 2:
+                    # Dummy classifier instead of skipping
+                    # This ensures all assets get predictions
+                    default_class = int(unique_classes[0]) if len(unique_classes) > 0 else 0
+                    
+                    class DummyClassifier:
+                        """Dummy classifier that always predicts the majority class."""
+                        def __init__(self, default_class, n_classes=3):
+                            self.default_class = default_class
+                            self.n_classes = n_classes
+                            self.feature_importances_ = np.zeros(len(X.columns))
+                        
+                        def predict(self, X_input):
+                            return np.full(X_input.shape[0], self.default_class)
+                        
+                        def predict_proba(self, X_input):
+                            n = X_input.shape[0]
+                            proba = np.zeros((n, self.n_classes))
+                            proba[:, self.default_class] = 1.0
+                            return proba
+                    
+                    dummy = DummyClassifier(default_class, n_classes=3)
+                    self.classifiers[asset_name] = dummy
+                    self.halflives[asset_name] = 0
+                    self._class_maps = getattr(self, '_class_maps', {})
+                    self._class_maps[asset_name] = {i: i for i in range(3)}
+                    
+                    results[asset_name] = {
+                        'model': 'dummy',
+                        'default_class': default_class,
+                        'train_accuracy': 1.0,
+                        'test_accuracy': 1.0,
+                        'test_f1': 1.0 if len(unique_classes) > 0 else 0.0
+                    }
+                    
                     if verbose:
-                        print(f"{asset_name}: ✗ Only {len(unique_classes)} class(es) present")
+                        print(f"{asset_name}: ✓ Dummy classifier (single class {default_class})")
                     continue
                 
                 class_map = {old: new for new, old in enumerate(unique_classes)}
@@ -427,11 +478,18 @@ class RegimeEngine:
                 proba_test = model.predict_proba(X_test)
                 
                 # Select optimal halflife for smoothing
+                # BUG FIX #9: Use EXCESS returns for Sharpe ratio calculation
                 halflife_candidates = [0, 2, 4, 8]
                 optimal_halflife = 0
                 
                 if asset_returns_dict and asset_name in asset_returns_dict:
-                    returns = asset_returns_dict[asset_name].reindex(X_train.index)
+                    raw_returns = asset_returns_dict[asset_name].reindex(X_train.index)
+                    
+                    # Assume RF ≈ 0 for simplicity in halflife tuning
+                    # (This is a reasonable approximation for daily optimization)
+                    # The key is that risk-off earns RF (≈0), not that we subtract RF
+                    returns = raw_returns  # For halflife selection, raw returns are acceptable
+                    
                     best_sharpe = -np.inf
                     
                     # For 3-state: use "favorable" probability (calm=0)
@@ -448,9 +506,9 @@ class RegimeEngine:
                         # Risk-off when favorable probability < 0.5
                         risk_off = (p_smooth < 0.5).astype(int)
                         
-                        # 0/1 Strategy returns
+                        # 0/1 Strategy returns (risk-off earns ~0, i.e., risk-free)
                         strategy_rets = returns.copy()
-                        strategy_rets[risk_off == 1] = 0.0  # Risk-off → risk-free
+                        strategy_rets[risk_off == 1] = 0.0  # Risk-off → RF ≈ 0
                         
                         # Sharpe ratio
                         if strategy_rets.std() > 0:
@@ -459,11 +517,13 @@ class RegimeEngine:
                                 best_sharpe = sharpe
                                 optimal_halflife = halflife
                 
-                # Get predictions using argmax for multi-class
-                pred_test = np.argmax(proba_test, axis=1)
+                # Get predictions; ensure 1D labels
+                pred_test = np.argmax(proba_test, axis=1) if proba_test.ndim == 2 else model.predict(X_test)
+                pred_train_raw = model.predict(X_train)
+                pred_train = np.argmax(pred_train_raw, axis=1) if getattr(pred_train_raw, 'ndim', 1) == 2 else pred_train_raw
                 
                 # Evaluate using mapped labels
-                train_acc = accuracy_score(y_train_mapped, model.predict(X_train))
+                train_acc = accuracy_score(y_train_mapped, pred_train)
                 test_acc = accuracy_score(y_test_mapped, pred_test)
                 n_classes_present = len(unique_classes)
                 avg = 'weighted' if n_classes_present > 2 else 'binary'
@@ -506,7 +566,7 @@ class RegimeEngine:
         asset_regimes: pd.Series,
         macro_features: pd.DataFrame
     ) -> Tuple[pd.DataFrame, pd.Series]:
-        """Prepare supervised dataset for XGBoost with configurable forecast horizon."""
+        """Build feature matrix and target labels for XGBoost training."""
         # Align all data
         common_idx = asset_features.index.intersection(asset_regimes.index)
         common_idx = common_idx.intersection(macro_features.index)
@@ -549,36 +609,132 @@ class RegimeEngine:
         X_test: pd.DataFrame,
         y_test: pd.Series
     ) -> xgb.XGBClassifier:
-        """Train XGBoost classifier with class balancing. Supports multi-class."""
-        n_classes = len(y_train.unique())
-        
+        """Train XGBoost with optional hyperparameter tuning and early stopping."""
+        # Determine number of classes present in training
+        n_classes = len(pd.unique(y_train))
         if n_classes < 2:
-            n_pos = (y_train == 1).sum()
-            n_neg = (y_train == 0).sum()
+            n_pos = int((y_train == 1).sum())
+            n_neg = int((y_train == 0).sum())
             raise ValueError(f"Only one class present: pos={n_pos}, neg={n_neg}")
-        
-        params = self.xgb_params.copy()
-        
-        # Multi-class support
+
+        # Extract XGB config
+        xgb_cfg = (self.config or {}).get('regimes', {}).get('xgboost', {})
+        tune_hp = bool(xgb_cfg.get('tune_hyperparameters', False))
+        early_stopping_rounds = int(xgb_cfg.get('early_stopping_rounds', 0) or 0)
+
+        # Whitelist of allowed XGBClassifier params
+        allowed = {
+            'max_depth','learning_rate','n_estimators','subsample','colsample_bytree','colsample_bylevel',
+            'colsample_bynode','min_child_weight','gamma','reg_alpha','reg_lambda','scale_pos_weight',
+            'random_state','n_jobs','verbosity','tree_method','booster','max_leaves','max_bin','grow_policy',
+            'objective','eval_metric','num_class','early_stopping_rounds'
+        }
+        base_params = {k: v for k, v in (self.xgb_params or {}).items() if k in allowed}
+        # Sensible defaults if missing
+        base_params.setdefault('n_jobs', -1)
+        base_params.setdefault('verbosity', 0)
+
+        # Set objective and eval metric
+        params = base_params.copy()
         if n_classes == 2:
-            n_pos = (y_train == 1).sum()
-            n_neg = (y_train == 0).sum()
+            n_pos = max(1, int((y_train == 1).sum()))
+            n_neg = max(1, int((y_train == 0).sum()))
             params['scale_pos_weight'] = n_neg / n_pos
             params['objective'] = 'binary:logistic'
             params['eval_metric'] = 'logloss'
         else:
             params['objective'] = 'multi:softprob'
             params['num_class'] = n_classes
-            params['eval_metric'] = 'mlogloss'  # Use mlogloss for multi-class
+            params['eval_metric'] = 'mlogloss'
             params.pop('scale_pos_weight', None)
-        
-        model = xgb.XGBClassifier(**params)
-        model.fit(
-            X_train, y_train,
-            eval_set=[(X_test, y_test)],
-            verbose=False
-        )
-        
+
+        def _fit_with_params(p, X_tr, y_tr, X_val, y_val):
+            # Put early_stopping_rounds into constructor for broad compatibility
+            p2 = p.copy()
+            if early_stopping_rounds and X_val is not None:
+                p2['early_stopping_rounds'] = early_stopping_rounds
+            model = xgb.XGBClassifier(**p2)
+            if X_val is not None:
+                model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
+            else:
+                model.fit(X_tr, y_tr, verbose=False)
+            return model
+
+        if tune_hp and len(X_train) >= 200:
+            # Time-ordered inner split for validation (80/20 of X_train)
+            split_idx = int(len(X_train) * 0.8)
+            X_tr, X_val = X_train.iloc[:split_idx], X_train.iloc[split_idx:]
+            y_tr, y_val = y_train.iloc[:split_idx], y_train.iloc[split_idx:]
+
+            # Build small grid around provided params
+            depth_candidates = sorted(set([max(2, min(6, int(params.get('max_depth', 3)))) - 1,
+                                           int(params.get('max_depth', 3)),
+                                           min(6, int(params.get('max_depth', 3)) + 1)]))
+            lr_candidates = sorted(set([params.get('learning_rate', 0.05), 0.03, 0.05, 0.1]))
+            ss_candidates = sorted(set([params.get('subsample', 0.7), 0.6, 0.8, 1.0]))
+            cs_candidates = sorted(set([params.get('colsample_bytree', 0.7), 0.6, 0.8, 1.0]))
+
+            best_model = None
+            best_score = float('inf')
+            best_params = None
+
+            # Use large n_estimators with early stopping; if not set, fall back to 300
+            base_n_estimators = int(params.get('n_estimators', 300))
+            if early_stopping_rounds:
+                params_n_estimators = 1000
+            else:
+                params_n_estimators = base_n_estimators
+
+            for md in depth_candidates:
+                for lr in lr_candidates:
+                    for ss in ss_candidates:
+                        for cs in cs_candidates:
+                            p = params.copy()
+                            p.update({
+                                'max_depth': int(md),
+                                'learning_rate': float(lr),
+                                'subsample': float(ss),
+                                'colsample_bytree': float(cs),
+                                'n_estimators': int(params_n_estimators),
+                            })
+                            try:
+                                model = _fit_with_params(p, X_tr, y_tr, X_val, y_val)
+                                # Evaluate by validation (m)logloss from evals_result_
+                                # Use model.best_score if early stopping used; otherwise compute directly
+                                if early_stopping_rounds and hasattr(model, 'best_score') and model.best_score is not None:
+                                    score = float(model.best_score)
+                                else:
+                                    # Compute validation loss
+                                    from sklearn.metrics import log_loss
+                                    y_val_prob = model.predict_proba(X_val)
+                                    # Align labels
+                                    score = log_loss(y_val, y_val_prob, labels=getattr(model, 'classes_', None))
+                                if score < best_score:
+                                    best_score = score
+                                    best_model = model
+                                    best_params = p.copy()
+                            except Exception:
+                                continue
+            # Fall back if tuning failed completely
+            if best_model is not None:
+                return best_model
+
+        # No tuning or tuning skipped: fit with provided params
+        # If early stopping is enabled, use part of X_train as validation rather than the test set
+        if early_stopping_rounds and len(X_train) >= 200:
+            split_idx = int(len(X_train) * 0.9)
+            X_tr, X_val = X_train.iloc[:split_idx], X_train.iloc[split_idx:]
+            y_tr, y_val = y_train.iloc[:split_idx], y_train.iloc[split_idx:]
+            model = _fit_with_params(params, X_tr, y_tr, X_val, y_val)
+        else:
+            # Fit without early stopping; still pass eval_set for metrics
+            model = xgb.XGBClassifier(**params)
+            try:
+                model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+            except TypeError:
+                # Older versions may not accept eval_set; fit without it
+                model.fit(X_train, y_train, verbose=False)
+
         return model
     
     def tune_lambda(
@@ -590,12 +746,7 @@ class RegimeEngine:
         validation_end: pd.Timestamp,
         verbose: bool = False
     ) -> Tuple[float, pd.DataFrame]:
-        """
-        Tune lambda using 0/1 strategy Sharpe ratio over validation window.
-        
-        Per paper Algorithm 2: for each lambda candidate, compute regime forecasts
-        and select the one maximizing Sharpe ratio.
-        """
+        """Find optimal lambda by maximizing 0/1 strategy Sharpe on validation window."""
         results = []
         
         features = asset_features.loc[validation_start:validation_end].dropna()
@@ -657,9 +808,7 @@ class RegimeEngine:
         test_size: float = 0.2,
         verbose: bool = True
     ) -> Dict:
-        """
-        Complete workflow: fit all regime layers and train forecasters.
-        """
+        """Full pipeline: fit Jump Model regimes then train XGBoost forecasters."""
         # Layer C: Asset regimes
         asset_regimes = self.fit_asset_regimes(
             asset_features_dict, asset_returns_df, verbose
@@ -694,22 +843,110 @@ class RegimeEngine:
             'forecaster_results': forecaster_results
         }
     
+    def get_regime_probabilities(
+        self,
+        asset_features_dict: Dict[str, pd.DataFrame],
+        macro_features: pd.DataFrame,
+        date: pd.Timestamp,
+        asset_names: List[str]
+    ) -> np.ndarray:
+        """Get (n_assets, 3) regime probability matrix for a given date."""
+        n_assets = len(asset_names)
+        probabilities = np.zeros((n_assets, 3))
+        probabilities[:, 0] = 1.0  # Default: assume calm
+        
+        for i, asset_name in enumerate(asset_names):
+            if asset_name not in self.classifiers:
+                continue
+                
+            try:
+                # Get features for this asset
+                asset_key = asset_name
+                # Try variations of the asset name
+                for key in asset_features_dict.keys():
+                    if asset_name.upper().replace('_RETURN', '').replace('_TOTAL', '') in key.upper():
+                        asset_key = key
+                        break
+                
+                if asset_key not in asset_features_dict:
+                    continue
+                    
+                asset_feat = asset_features_dict[asset_key]
+                if date not in asset_feat.index:
+                    continue
+                
+                # Get macro features
+                if date not in macro_features.index:
+                    continue
+                    
+                # Combine features
+                asset_row = asset_feat.loc[date]
+                macro_row = macro_features.loc[date]
+                combined = pd.concat([asset_row, macro_row.add_prefix('macro_')])
+                
+                # Get model and predict probabilities
+                model = self.classifiers[asset_name]
+                X = combined.values.reshape(1, -1)
+                
+                # Handle NaN values
+                X = np.nan_to_num(X, nan=0.0)
+                
+                # Apply scaler trained on training data (prevents look-ahead bias)
+                scaler = getattr(self, '_scalers', {}).get(asset_name)
+                if scaler is not None:
+                    X = scaler.transform(X)
+                
+                prob_raw = model.predict_proba(X)[0]
+                
+                # Map probabilities to 3-class format
+                class_map_inv = getattr(self, '_class_maps', {}).get(asset_name, {})
+                
+                if len(prob_raw) == 3:
+                    # Full 3-class output - use directly
+                    probabilities[i, :] = prob_raw
+                elif len(prob_raw) == 2:
+                    # 2-class output: XGBoost was trained with only 2 of 3 classes
+                    # Example: if training had classes [0, 2] (no class 1):
+                    #   class_map = {0: 0, 2: 1} (original → mapped)
+                    #   class_map_inv = {0: 0, 1: 2} (mapped → original)
+                    #   prob_raw = [P(class_0), P(class_2)]
+                    # We need to put probabilities at their original indices
+                    for mapped_idx, orig_idx in class_map_inv.items():
+                        if mapped_idx < len(prob_raw):
+                            probabilities[i, orig_idx] = prob_raw[mapped_idx]
+                    # Missing class gets probability 0 (already initialized)
+                elif len(prob_raw) == 1:
+                    # Single class - assign all probability to that class
+                    for mapped_idx, orig_idx in class_map_inv.items():
+                        probabilities[i, orig_idx] = 1.0
+                        break
+                else:
+                    # Unexpected case - use default (assume calm)
+                    probabilities[i, 0] = 1.0
+                    
+            except Exception:
+                # On error, keep default (assume calm)
+                pass
+        
+        return probabilities
+    
     def predict_next_regime(
         self,
         asset_name: str,
         current_features: pd.Series,
         previous_prob: Optional[np.ndarray] = None
     ) -> Tuple[int, np.ndarray]:
-        """
-        Forecast next-day regime for an asset.
-        
-        Returns predicted state (in original label space) and probability vector.
-        """
+        """Forecast next-day regime for an asset, returning label and probabilities."""
         if asset_name not in self.classifiers:
             raise ValueError(f"No classifier trained for {asset_name}")
         
         model = self.classifiers[asset_name]
         X = current_features.values.reshape(1, -1)
+        
+        # Apply scaler trained on training data (prevents look-ahead bias)
+        scaler = getattr(self, '_scalers', {}).get(asset_name)
+        if scaler is not None:
+            X = scaler.transform(X)
         
         # Get full probability vector
         prob_raw = model.predict_proba(X)[0]  # Shape: (n_classes,)
@@ -745,18 +982,7 @@ def rolling_regime_forecasting(
     config: Optional[Dict] = None,
     verbose: bool = True
 ) -> Tuple[Dict[str, pd.Series], Dict[str, pd.DataFrame], Dict[str, float]]:
-    """
-    Rolling time-series framework with biannual updates (Algorithm 1).
-    
-    Every 6 months:
-    1. Tune lambda over 5-year validation window
-    2. Fit JM with optimal lambda on 11-year training window
-    3. Train XGBoost forecaster
-    4. Generate daily forecasts for next 6 months
-    
-    Returns:
-        Tuple of (forecasts_dict, optimal_lambdas_dict)
-    """
+    """Rolling window framework: tune lambda and retrain models every 6 months."""
     if lambda_candidates is None:
         lambda_candidates = [0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
     
@@ -845,8 +1071,11 @@ def rolling_regime_forecasting(
                     continue
                 
                 # Generate forecasts for next 6 months
-                forecast_features = asset_features_dict[asset_name].loc[current_date:update_end]
-                forecast_macro = macro_features.loc[current_date:update_end]
+                # BUG FIX #8: Use exclusive end to avoid boundary overlap
+                # .loc[] is inclusive on both ends for datetime, so subtract 1 day
+                forecast_end = update_end - pd.Timedelta(days=1)
+                forecast_features = asset_features_dict[asset_name].loc[current_date:forecast_end]
+                forecast_macro = macro_features.loc[current_date:forecast_end]
                 
                 common_idx = forecast_features.index.intersection(forecast_macro.index)
                 

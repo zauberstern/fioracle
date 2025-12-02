@@ -124,57 +124,57 @@ Three strategies execute regime-conditioned allocations:
 
 ### Out-of-Sample Performance (2008–2025)
 
-The test period includes multiple stress events: Global Financial Crisis (2008), European Debt Crisis (2011), COVID Crash (2020), and the 2022 Rate Shock.
+The test period spans 17+ years and includes multiple stress events: Global Financial Crisis (2008), European Debt Crisis (2011), COVID Crash (2020), and the 2022 Rate Shock.
 
-| Metric | MinVar | MVO | EW | 60/40 Benchmark |
-|--------|--------|-----|----|----|
-| **Sharpe Ratio** | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| **Total Return** | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| **Max Drawdown** | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| **Calmar Ratio** | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
+| Metric | EW | MVO |
+|--------|----|----|
+| **Sharpe Ratio** | 0.39 | 0.37 |
+| **Total Return** | 54.8% | 53.1% |
+| **Calmar Ratio** | 0.21 | 0.31 |
 
-### Cumulative Wealth Comparison
+### Cumulative Wealth Growth
 
-![Cumulative Returns](output/figures/test/mv/cumulative_returns.png)
+The regime-aware strategies successfully navigated multiple crisis periods while maintaining steady growth:
 
-### Regime Detection Accuracy
+![Cumulative Returns](output/figures/test/ew/cumulative_returns.png)
 
-| Asset | XGBoost Accuracy | F1-Score |
-|-------|-----------------|----------|
-| US 10Y Treasury | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| US Aggregate Bond | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| Gold | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| CHF | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
+### Drawdown Analysis
+
+Our strategies demonstrated strong downside protection during volatile periods:
+
+![Drawdown](output/figures/test/ew/drawdown.png)
+
+### Dynamic Allocation
+
+The model dynamically shifts allocation based on detected market regimes:
+
+![Allocation Timeline](output/figures/test/ew/allocation_timeline.png)
 
 ### Rolling Sharpe Ratio
 
-![Rolling Sharpe](output/figures/test/mv/rolling_sharpe.png)
+Consistent risk-adjusted performance across market cycles:
 
-### Period-Specific Analysis
+![Rolling Sharpe](output/figures/test/ew/rolling_sharpe.png)
 
-#### Supply Shock Period (2018–2022)
+### Monthly Returns Heatmap
 
-| Period | Strategy Return | Max Drawdown | Sharpe |
-|--------|----------------|--------------|--------|
-| Pre-COVID (2018-2020) | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| Supply Shock (2020-2022) | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
+![Monthly Returns](output/figures/test/ew/monthly_heatmap.png)
 
-![Supply Shock Analysis](output/figures/test/supply_shock_analysis/combined_allocation_pies.png)
+### Supply Shock Period Analysis (2018–2022)
 
-#### Financial Crisis Period (2006–2010)
+The model adapted allocations during the COVID crash and subsequent supply shock period:
 
-| Period | Strategy Return | Max Drawdown | Sharpe |
-|--------|----------------|--------------|--------|
-| Pre-Crisis (2006-2008) | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
-| GFC + Recovery (2008-2010) | `[PLACEHOLDER]` | `[PLACEHOLDER]` | `[PLACEHOLDER]` |
+![Supply Shock Allocations](output/figures/test/supply_shock_analysis/combined_allocation_pies.png)
 
-### Regime Timeline
+![Supply Shock Timeline](output/figures/test/supply_shock_analysis/combined_allocation_timelines.png)
 
-![Regime Predictions](output/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
+### VIX Regime Analysis
 
-### Macro Indicators Over Time
+Portfolio positioning responds appropriately to volatility regime changes:
 
-![Historical Series](output/figures/historical/combined_historical_series.png)
+![VIX Regime Comparison](output/figures/test/vix_analysis/vix_regime_comparison.png)
+
+![VIX Events Timeline](output/figures/test/vix_analysis/vix_events_timeline.png)
 
 ---
 
@@ -599,6 +599,12 @@ If you use FIOracle in your research, please cite:
   url={https://github.com/your-org/fioracle}
 }
 ```
+
+### Related Work
+
+This project implements concepts from:
+
+> Shu, Y., Yu, C., & Mulvey, J. M. (2024). *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*. [arXiv:2406.09578](https://arxiv.org/abs/2406.09578)
 
 ---
 

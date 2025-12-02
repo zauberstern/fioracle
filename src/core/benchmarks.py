@@ -1,11 +1,5 @@
 """
-Benchmark Portfolio Strategies
-
-Implements multiple benchmark strategies for comparison:
-1. Equal-Weight Buy & Hold (EW B&H)
-2. 60/40 Government/Credit Benchmark
-3. Barbell Strategy (80-90% safe, 10-20% risky)
-4. Diversified Core FI Strategy (balanced allocation)
+Passive benchmark strategies: EW B&H, 60/40 Gov/Credit, Barbell, Diversified Core.
 """
 
 import numpy as np
@@ -17,23 +11,10 @@ warnings.filterwarnings('ignore')
 
 
 class BenchmarkEngine:
-    """
-    Engine for computing various benchmark portfolio returns.
-    
-    Supports:
-    - Equal-weight buy-and-hold
-    - 60/40 Government/Credit (quarterly rebalanced)
-    - Barbell Strategy
-    - Diversified Core FI Strategy
-    """
+    """Compute EW, 60/40, Barbell, and Diversified benchmark returns."""
     
     def __init__(self, config: Optional[Dict] = None):
-        """
-        Initialize benchmark engine.
-        
-        Args:
-            config: Configuration dictionary with asset categories
-        """
+        """Load asset categories from config."""
         self.config = config or {}
         
         # Asset categories from config
@@ -71,15 +52,7 @@ class BenchmarkEngine:
         return self._find_matching_assets(category_assets, available_cols)
     
     def compute_ew_benchmark(self, returns_df: pd.DataFrame) -> pd.Series:
-        """
-        Compute equal-weight buy-and-hold benchmark.
-        
-        Args:
-            returns_df: DataFrame of asset returns
-            
-        Returns:
-            Series of benchmark returns
-        """
+        """Equal-weight average of all assets (no rebalancing)."""
         available = [c for c in returns_df.columns if not returns_df[c].isna().all()]
         if len(available) == 0:
             return pd.Series(0.0, index=returns_df.index)
@@ -93,23 +66,7 @@ class BenchmarkEngine:
         credit_weight: float = 0.4,
         rebalance_freq: str = 'Q'
     ) -> Tuple[pd.Series, pd.DataFrame]:
-        """
-        Compute 60/40 Government/Credit benchmark.
-        
-        Traditional fixed income allocation:
-        - 60% to government bonds (equal-weight average of Treasury indices)
-        - 40% to credit (equal-weight average of corporate and credit indices)
-        - Rebalanced quarterly to maintain target weights
-        
-        Args:
-            returns_df: DataFrame of asset returns
-            gov_weight: Weight for government bonds (default 0.6)
-            credit_weight: Weight for credit (default 0.4)
-            rebalance_freq: Rebalancing frequency ('Q' = quarterly, 'M' = monthly)
-            
-        Returns:
-            Tuple of (benchmark_returns, weights_df)
-        """
+        """60% gov bonds, 40% credit; quarterly rebalanced."""
         available_cols = returns_df.columns.tolist()
         
         # Find government bond assets
@@ -185,22 +142,7 @@ class BenchmarkEngine:
         risky_weight: float = 0.15,
         rebalance_freq: str = 'Q'
     ) -> Tuple[pd.Series, pd.DataFrame]:
-        """
-        Compute Barbell Strategy benchmark.
-        
-        Concentrates 80-90% of capital in cash or short-dated safe assets,
-        with remaining 10-20% allocated to risky or hedging instruments
-        (high-yield-exposed credit and tail hedges).
-        
-        Args:
-            returns_df: DataFrame of asset returns
-            safe_weight: Weight for safe assets (default 0.85)
-            risky_weight: Weight for risky/hedging assets (default 0.15)
-            rebalance_freq: Rebalancing frequency
-            
-        Returns:
-            Tuple of (benchmark_returns, weights_df)
-        """
+        """85% safe assets, 15% risky/hedge instruments; quarterly rebalanced."""
         available_cols = returns_df.columns.tolist()
         
         # Safe assets: cash + short-duration government bonds
@@ -272,25 +214,7 @@ class BenchmarkEngine:
         returns_df: pd.DataFrame,
         rebalance_freq: str = 'Q'
     ) -> Tuple[pd.Series, pd.DataFrame]:
-        """
-        Compute Diversified Core FI Strategy benchmark.
-        
-        Spreads capital more evenly across rates, credit, inflation-linked bonds,
-        and tail hedges with moderate weights (e.g., 20-30% each bucket).
-        
-        Target allocation:
-        - Rates (Government bonds): 25%
-        - Credit (IG + HY): 25%
-        - Inflation-linked: 25%
-        - Safe havens/hedges: 25%
-        
-        Args:
-            returns_df: DataFrame of asset returns
-            rebalance_freq: Rebalancing frequency
-            
-        Returns:
-            Tuple of (benchmark_returns, weights_df)
-        """
+        """25% each: rates, credit, inflation-linked, hedges."""
         available_cols = returns_df.columns.tolist()
         
         # Define buckets
@@ -364,15 +288,7 @@ class BenchmarkEngine:
         self,
         returns_df: pd.DataFrame
     ) -> Dict[str, Tuple[pd.Series, Optional[pd.DataFrame]]]:
-        """
-        Compute all benchmark strategies.
-        
-        Args:
-            returns_df: DataFrame of asset returns
-            
-        Returns:
-            Dict mapping benchmark name to (returns_series, weights_df)
-        """
+        """Return all benchmark strategies as a dict."""
         n_assets = len([c for c in returns_df.columns if not returns_df[c].isna().all()])
         
         benchmarks = {}
@@ -409,16 +325,7 @@ def build_all_benchmarks_enhanced(
     split_returns: pd.DataFrame,
     config: dict
 ) -> Dict[str, pd.Series]:
-    """
-    Build all benchmarks for comparison.
-    
-    Args:
-        split_returns: DataFrame of asset returns
-        config: Configuration dict
-        
-    Returns:
-        Dict mapping benchmark_name -> returns series
-    """
+    """Convenience wrapper returning benchmark return series."""
     engine = BenchmarkEngine(config)
     all_benchmarks = engine.compute_all_benchmarks(split_returns)
     
