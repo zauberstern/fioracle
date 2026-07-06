@@ -8,12 +8,6 @@
   <strong>Regime-Aware Fixed Income Oracle</strong>
 </p>
 
-<p align="center">
-  <sub>
-    <em>Kartik Yadav · Leon Förch · Edward Kachatryan · Nicola Copetti · Alessandro Florentino</em>
-  </sub>
-</p>
-
 <br/>
 
 <p align="center">
