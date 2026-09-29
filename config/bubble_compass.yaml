@@ -1,0 +1,63 @@
+# Universe from Phase 0 CATALOG / wired_series (not a guessed 3-ticker list).
+assets:
+  - SP500_TOTAL_RETURN
+  - BBG_US_HIGH_YIELD_TOTAL_RETURN
+  - BBG_US_CORPORATE_TOTAL_RETURN
+  - BBG_US_TREASURY_TOTAL_RETURN
+  - CDX_HY_5Y_TOTAL_RETURN
+  - CDX_IG_5Y_TOTAL_RETURN
+  - GOLD_TOTAL_RETURN
+  - US_CASH_RETURN
+  - VRP_HARVEST_TOTAL_RETURN
+  - WTI_TOTAL_RETURN
+  - EUA_FRONT
+  - TTF_FRONT
+
+macros:
+  enabled:
+    - US_DEBT_TO_GDP
+    - US_HY_CORP_OAS_TOTAL_RETURN
+    - VIX
+    - US_UNEMPLOYMENT_RATE
+    - US_INFLATION_RATE
+    - US_GDP_GROWTH
+    - EPU
+    - GPRI
+
+biomes:
+  SP500_TOTAL_RETURN: equity_plains
+  BBG_US_HIGH_YIELD_TOTAL_RETURN: credit_swamp
+  BBG_US_CORPORATE_TOTAL_RETURN: credit_swamp
+  BBG_US_TREASURY_TOTAL_RETURN: rate_flats
+  CDX_HY_5Y_TOTAL_RETURN: credit_swamp
+  CDX_IG_5Y_TOTAL_RETURN: credit_swamp
+  GOLD_TOTAL_RETURN: hard_asset_ridge
+  US_CASH_RETURN: rate_flats
+  VRP_HARVEST_TOTAL_RETURN: vol_canyon
+  WTI_TOTAL_RETURN: energy_basin
+  EUA_FRONT: energy_basin
+  TTF_FRONT: energy_basin
+
+cadence:
+  dlinear: nightly
+  psy: daily_close
+  lppls: every_4h
+  sentiment: every_15m
+  regime: every_10m
+  macro_debt: nightly
+
+thresholds:
+  psy_significance: 0.05
+  lppls_confidence: 0.6
+  sentiment_spike: 0.72
+  debt_sustainable: 110.0
+  heat_crisis: 70.0
+
+lookback:
+  dlinear: 96
+  kernel_size: 25
+
+history:
+  start: "2008-01-01"
+  step_days: 5
+  primary_asset: SP500_TOTAL_RETURN
