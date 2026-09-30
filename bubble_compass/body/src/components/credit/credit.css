@@ -1,0 +1,45 @@
+.bc-credit {
+  --bc-bg: #0a0a0a;
+  --bc-fg: #e8e8e8;
+  --bc-muted: #6b6b6b;
+  --bc-accent: #ff6b35;
+  --bc-danger: #e63946;
+  --bc-border: #1f1f1f;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color: var(--bc-fg);
+  background: var(--bc-bg);
+}
+
+.bc-credit__panel {
+  border: 1px solid var(--bc-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: var(--bc-bg);
+}
+
+.bc-credit__title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bc-muted);
+  margin: 0 0 10px;
+}
+
+.bc-credit__accent {
+  color: var(--bc-accent);
+}
+
+.bc-credit__danger {
+  color: var(--bc-danger);
+}
+
+.bc-credit__empty {
+  font-size: 13px;
+  color: var(--bc-muted);
+  padding: 8px 0;
+}
+
+.bc-credit__mono {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}

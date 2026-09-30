@@ -1,0 +1,58 @@
+.bc-debt-grid {
+  background: #0a0a0a;
+  color: #e8e8e8;
+  border: 1px solid #1f1f1f;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+.bc-debt-grid__title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6b6b;
+  margin: 0 0 10px;
+}
+
+.bc-debt-grid__empty {
+  font-size: 13px;
+  color: #6b6b6b;
+  margin: 0;
+}
+
+.bc-debt-grid__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bc-debt-grid__table th {
+  text-align: left;
+  color: #6b6b6b;
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid #1f1f1f;
+}
+
+.bc-debt-grid__table td {
+  padding: 8px;
+  border-bottom: 1px solid #141414;
+}
+
+.bc-debt-grid__pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid #ff6b35;
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.bc-debt-grid__mono {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.bc-debt-grid__muted {
+  color: #6b6b6b;
+}
