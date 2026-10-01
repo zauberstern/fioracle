@@ -1,0 +1,69 @@
+{
+  "benchmark": "SP500_TOTAL_RETURN",
+  "sleeves": [
+    {
+      "id": "SP500_TOTAL_RETURN",
+      "label": "S&P 500 TR",
+      "color": "#4a9eff",
+      "riskBucket": "equity",
+      "spreadBps": 0,
+      "elBps": 15
+    },
+    {
+      "id": "BBG_US_HIGH_YIELD_TOTAL_RETURN",
+      "label": "US HY TR",
+      "color": "#ff6b4a",
+      "riskBucket": "credit",
+      "spreadBps": 420,
+      "elBps": 180
+    },
+    {
+      "id": "BBG_US_CORPORATE_TOTAL_RETURN",
+      "label": "US Corp TR",
+      "color": "#ffb84a",
+      "riskBucket": "credit",
+      "spreadBps": 140,
+      "elBps": 45
+    },
+    {
+      "id": "BBG_US_TREASURY_TOTAL_RETURN",
+      "label": "UST TR",
+      "color": "#7dff9a",
+      "riskBucket": "rates",
+      "spreadBps": 10,
+      "elBps": 2
+    },
+    {
+      "id": "GOLD_TOTAL_RETURN",
+      "label": "Gold TR",
+      "color": "#ffd700",
+      "riskBucket": "real",
+      "spreadBps": 0,
+      "elBps": 25
+    },
+    {
+      "id": "US_CASH_RETURN",
+      "label": "Cash",
+      "color": "#c8c8c8",
+      "riskBucket": "cash",
+      "spreadBps": 25,
+      "elBps": 0
+    },
+    {
+      "id": "CDX_HY_5Y_TOTAL_RETURN",
+      "label": "CDX HY 5Y",
+      "color": "#ff3d6e",
+      "riskBucket": "cds",
+      "spreadBps": 380,
+      "elBps": 220
+    },
+    {
+      "id": "CDX_IG_5Y_TOTAL_RETURN",
+      "label": "CDX IG 5Y",
+      "color": "#b86bff",
+      "riskBucket": "cds",
+      "spreadBps": 85,
+      "elBps": 35
+    }
+  ]
+}

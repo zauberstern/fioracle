@@ -1,0 +1,29 @@
+{
+  "episodes": [
+    {
+      "asOf": "2008-01-02",
+      "title": "Tape Open",
+      "subtitle": "History starts 2008; first session on the parquet"
+    },
+    {
+      "asOf": "2008-09-15",
+      "title": "Lehman Monday",
+      "subtitle": "Credit cascade, bust regime"
+    },
+    {
+      "asOf": "2020-03-16",
+      "title": "Covid Floor",
+      "subtitle": "Liquidity shock, crash window"
+    },
+    {
+      "asOf": "2022-01-03",
+      "title": "Rates Pivot",
+      "subtitle": "Duration reset, sentiment flip"
+    },
+    {
+      "asOf": "2023-03-10",
+      "title": "SVB Weekend",
+      "subtitle": "Bank stress, HY widening"
+    }
+  ]
+}

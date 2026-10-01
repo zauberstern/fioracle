@@ -1,0 +1,123 @@
+{
+  "assets": {
+    "SP500_TOTAL_RETURN": {
+      "asset": "SP500_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "1999-03-10T00:00:00.000Z", "residual_z": 2.5, "daily_return": -0.012, "trend": 1.4 },
+          { "as_of": "2022-01-03T00:00:00.000Z", "residual_z": 1.1, "daily_return": -0.018, "trend": 0.3 },
+          { "as_of": "2008-09-12T00:00:00.000Z", "residual_z": 0.4, "daily_return": -0.018, "trend": 0.2 },
+          { "as_of": "2008-09-15T00:00:00.000Z", "residual_z": 1.8, "daily_return": -0.049, "trend": -0.6 },
+          { "as_of": "2008-09-16T00:00:00.000Z", "residual_z": 2.2, "daily_return": 0.041, "trend": -0.4 },
+          { "as_of": "2020-03-13T00:00:00.000Z", "residual_z": 3.1, "daily_return": 0.092, "trend": -1.2 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "residual_z": 3.8, "daily_return": -0.119, "trend": -1.8 },
+          { "as_of": "2020-03-17T00:00:00.000Z", "residual_z": 2.9, "daily_return": 0.061, "trend": -1.1 },
+          { "as_of": "2023-03-09T00:00:00.000Z", "residual_z": 0.6, "daily_return": -0.009, "trend": 0.1 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "residual_z": 1.4, "daily_return": -0.014, "trend": -0.2 },
+          { "as_of": "2023-03-13T00:00:00.000Z", "residual_z": 1.9, "daily_return": 0.011, "trend": -0.3 }
+        ],
+        "bsadf": [
+          { "as_of": "2008-09-12T00:00:00.000Z", "bsadf_stat": 1.1, "critical_value": 1.9, "bubble_flag": false },
+          { "as_of": "2008-09-15T00:00:00.000Z", "bsadf_stat": 2.4, "critical_value": 1.9, "bubble_flag": true },
+          { "as_of": "2008-09-16T00:00:00.000Z", "bsadf_stat": 2.1, "critical_value": 1.9, "bubble_flag": true },
+          { "as_of": "2020-03-13T00:00:00.000Z", "bsadf_stat": 1.7, "critical_value": 1.9, "bubble_flag": false },
+          { "as_of": "2020-03-16T00:00:00.000Z", "bsadf_stat": 2.8, "critical_value": 1.9, "bubble_flag": true },
+          { "as_of": "2020-03-17T00:00:00.000Z", "bsadf_stat": 2.3, "critical_value": 1.9, "bubble_flag": true },
+          { "as_of": "2023-03-09T00:00:00.000Z", "bsadf_stat": 1.2, "critical_value": 1.9, "bubble_flag": false },
+          { "as_of": "2023-03-10T00:00:00.000Z", "bsadf_stat": 1.8, "critical_value": 1.9, "bubble_flag": false },
+          { "as_of": "2023-03-13T00:00:00.000Z", "bsadf_stat": 2.0, "critical_value": 1.9, "bubble_flag": true }
+        ],
+        "lppls": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "lpp_confidence": 0.72, "crash_window_start": "2008-08-01", "crash_window_end": "2009-06-30" },
+          { "as_of": "2020-03-16T00:00:00.000Z", "lpp_confidence": 0.81, "crash_window_start": "2020-02-01", "crash_window_end": "2020-04-30" },
+          { "as_of": "2023-03-10T00:00:00.000Z", "lpp_confidence": 0.55, "crash_window_start": "2023-02-01", "crash_window_end": "2023-05-31" }
+        ],
+        "sentiment": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "sentiment_level": -0.7, "sentiment_velocity": -0.3 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "sentiment_level": -0.9, "sentiment_velocity": -0.5 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "sentiment_level": -0.4, "sentiment_velocity": -0.2 }
+        ],
+        "regime": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "regime_state": "bust", "regime_confidence": 0.88, "boom_probability": 0.05, "bust_probability": 0.75 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "regime_state": "bust", "regime_confidence": 0.79, "boom_probability": 0.08, "bust_probability": 0.62 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "regime_state": "normal", "regime_confidence": 0.55, "boom_probability": 0.2, "bust_probability": 0.35 }
+        ],
+        "macro_debt": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "spread_bps": 780, "ltv": 0.82 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "spread_bps": 520, "ltv": 0.71 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "spread_bps": 410, "ltv": 0.68 }
+        ]
+      }
+    },
+    "BBG_US_HIGH_YIELD_TOTAL_RETURN": {
+      "asset": "BBG_US_HIGH_YIELD_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": -0.032 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": -0.058 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": -0.021 }
+        ]
+      }
+    },
+    "BBG_US_CORPORATE_TOTAL_RETURN": {
+      "asset": "BBG_US_CORPORATE_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": -0.024 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": -0.041 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": -0.015 }
+        ]
+      }
+    },
+    "BBG_US_TREASURY_TOTAL_RETURN": {
+      "asset": "BBG_US_TREASURY_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": 0.012 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": 0.028 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": 0.006 }
+        ]
+      }
+    },
+    "GOLD_TOTAL_RETURN": {
+      "asset": "GOLD_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": 0.009 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": 0.014 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": 0.011 }
+        ]
+      }
+    },
+    "US_CASH_RETURN": {
+      "asset": "US_CASH_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": 0.0001 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": 0.0001 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": 0.0002 }
+        ]
+      }
+    },
+    "CDX_HY_5Y_TOTAL_RETURN": {
+      "asset": "CDX_HY_5Y_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": -0.045 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": -0.072 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": -0.028 }
+        ]
+      }
+    },
+    "CDX_IG_5Y_TOTAL_RETURN": {
+      "asset": "CDX_IG_5Y_TOTAL_RETURN",
+      "layers": {
+        "dlinear": [
+          { "as_of": "2008-09-15T00:00:00.000Z", "daily_return": -0.019 },
+          { "as_of": "2020-03-16T00:00:00.000Z", "daily_return": -0.033 },
+          { "as_of": "2023-03-10T00:00:00.000Z", "daily_return": -0.012 }
+        ]
+      }
+    }
+  }
+}
