@@ -1,0 +1,5 @@
+# Optional custom domain for GitHub Pages.
+# To enable: copy this file to docs/CNAME with your hostname only, e.g.:
+# fioracle.dev
+# Then configure DNS and GitHub Pages custom domain in repo Settings.
+# Do not commit a live CNAME until DNS and TLS are ready.

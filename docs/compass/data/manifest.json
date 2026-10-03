@@ -1,0 +1,110 @@
+{
+  "source": "history_parquet",
+  "n_assets": 8,
+  "assets": [
+    {
+      "asset": "SP500_TOTAL_RETURN",
+      "path": "docs/compass/data/history/SP500_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "BBG_US_HIGH_YIELD_TOTAL_RETURN",
+      "path": "docs/compass/data/history/BBG_US_HIGH_YIELD_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "BBG_US_CORPORATE_TOTAL_RETURN",
+      "path": "docs/compass/data/history/BBG_US_CORPORATE_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "BBG_US_TREASURY_TOTAL_RETURN",
+      "path": "docs/compass/data/history/BBG_US_TREASURY_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "GOLD_TOTAL_RETURN",
+      "path": "docs/compass/data/history/GOLD_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "US_CASH_RETURN",
+      "path": "docs/compass/data/history/US_CASH_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "CDX_HY_5Y_TOTAL_RETURN",
+      "path": "docs/compass/data/history/CDX_HY_5Y_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    },
+    {
+      "asset": "CDX_IG_5Y_TOTAL_RETURN",
+      "path": "docs/compass/data/history/CDX_IG_5Y_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 980
+    }
+  ]
+}

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FIOracle -- Crisis-convexity research for fixed income</title>
+<meta name="description" content="Regime-aware crisis-convexity research software for fixed income allocators. Pre-registered gates. Not investment advice." />
+<link rel="canonical" href="https://zauberstern.github.io/fioracle/" />
+<meta property="og:title" content="FIOracle -- Crisis-convexity research for fixed income" />
+<meta property="og:description" content="Regime-aware crisis-convexity research software for fixed income allocators. Pre-registered gates. Not investment advice." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://zauberstern.github.io/fioracle/" />
+<meta name="twitter:card" content="summary" />
+<meta name="theme-color" content="#05070d" />
+<meta name="robots" content="index,follow" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self' https://formspree.io; object-src 'none'; frame-ancestors 'none'" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+<div class="compliance-banner" role="status">
+  Research software. Not investment advice. No live client capital. Gate status: <code>cleared: false</code>.
+</div>
+
+<nav class="nav" aria-label="Primary">
+  <span class="nav-logo">FI<span class="accent">ORACLE</span></span>
+  <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">Menu</button>
+  <div class="nav-links" id="nav-links">
+    <a href="#what">What It Does</a>
+    <a href="#regimes">Regimes</a>
+    <a href="#shield">Mechanism</a>
+    <a href="#transparency">Audit Trail</a>
+    <a href="#compliance">Compliance</a>
+    <a href="molecule/index.html">Gas engine</a>
+    <a href="compass/">Bubble Compass</a>
+    <a href="manifesto.html">Manifesto</a>
+  </div>
+  <a href="#briefing" class="btn btn-nav">Request a Briefing</a>
+</nav>
+
+<header class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow">For fixed income allocators and risk committees</span>
+    <h1 id="hero-title" class="hero-title">
+      <span class="line">When everything else is</span><br/>
+      <span class="line">falling, what happens to <span class="accent">you</span>?</span>
+    </h1>
+    <p id="hero-subtitle" class="hero-subtitle">
+      FIOracle is a regime-aware crisis-convexity <strong>research system</strong> for fixed income.
+      It is judged by pre-registered statistical gates before anyone is allowed to sell a performance story.
+      The published FI allocation SPA versus Agg / 60-40 remains a <strong>null</strong>.
+    </p>
+    <div class="hero-cta">
+      <a href="#briefing" class="btn btn-primary">Request a Briefing</a>
+      <a href="compass/" class="btn btn-ghost">Open Bubble Compass</a>
+      <a href="manifesto.html" class="btn btn-ghost">Read the Manifesto</a>
+    </div>
+  </div>
+  <div class="hero-orbs" id="hero-orbs" aria-hidden="true">
+    <div class="orb orb-calm" data-regime="calm"></div>
+    <div class="orb orb-inflation" data-regime="inflation"></div>
+    <div class="orb orb-crisis" data-regime="crisis"></div>
+  </div>
+  <div class="scroll-cue">scroll</div>
+</header>
+
+<section class="trust-bar reveal" aria-label="Trust signals">
+  <div class="trust-item"><span class="trust-num" data-trust="testFiles">--</span><span class="trust-label">automated test files</span></div>
+  <div class="trust-item"><span class="trust-num" data-trust="pitLabel">PIT</span><span class="trust-label">point-in-time data discipline</span></div>
+  <div class="trust-item"><span class="trust-num" data-trust="gates">4</span><span class="trust-label">pre-registered success gates</span></div>
+  <div class="trust-item"><span class="trust-num" data-trust="licenseShort">MIT</span><span class="trust-label">open source license</span></div>
+  <div class="trust-item"><span class="trust-num" data-trust="liveClientCapital">0</span><span class="trust-label">live client capital deployed</span></div>
+</section>
+
+<main id="main">
+
+<section id="what" class="section reveal">
+  <h2 class="section-title"><span class="section-num">01</span> What It Does, In One Sentence</h2>
+  <p class="section-lede big-lede">
+    Most fixed income tools chase a return that the academic literature says barely
+    exists. FIOracle stopped chasing it, and built one honestly measurable thing instead:
+    a portfolio that is designed to fall less than the market when the market breaks.
+  </p>
+  <div class="debate-grid">
+    <div class="debate-card story-a">
+      <h3>How most tools compete</h3>
+      <p>Stack ten cutting-edge methods -- foundation models, graph neural nets,
+        reinforcement learning -- and market the combination as an edge. It reads well
+        in a pitch deck. It rarely survives contact with live capital.</p>
+      <span class="verdict verdict-fail">Not our approach</span>
+    </div>
+    <div class="debate-vs">VS</div>
+    <div class="debate-card story-b">
+      <h3>How FIOracle competes</h3>
+      <p>One metric, defined before the fact: crisis-conditional drawdown behavior.
+        Every method we add -- regime detection, calibrated uncertainty, a
+        volatility overlay -- is tested against that one metric, or it does not ship.</p>
+      <span class="verdict verdict-win">Our approach</span>
+    </div>
+  </div>
+  <p class="section-footnote">
+    This is a positioning choice, not a modesty performance. Residual alpha in active
+    fixed income management, once you strip out factor premia, is close to zero across
+    most manager categories in the published literature. We built around that fact
+    instead of ignoring it.
+  </p>
+  <p class="section-footnote">
+    We do not publish a public Sharpe or ERoD number on this site. When the gate clears,
+    figures would still be hypothetical performance with audience and disclosure rules.
+    See <a href="#compliance">Compliance</a>.
+  </p>
+</section>
+
+<section id="regimes" class="section reveal">
+  <h2 class="section-title"><span class="section-num">02</span> Three States, One Decision Framework</h2>
+  <p class="section-lede">A causal regime model watches only the past -- it is never allowed to peek at the future, even in a backtest.</p>
+  <div class="regime-stage" id="regime-stage">
+    <svg id="regime-svg" viewBox="0 0 600 400" class="regime-svg" aria-hidden="true">
+      <line x1="150" y1="120" x2="450" y2="120" class="regime-link" />
+      <line x1="150" y1="120" x2="300" y2="320" class="regime-link" />
+      <line x1="450" y1="120" x2="300" y2="320" class="regime-link" />
+    </svg>
+    <div class="regime-orb regime-calm" data-target="calm" role="button" tabindex="0" aria-pressed="false" style="left:12%; top:18%;">
+      <span>Calm</span>
+    </div>
+    <div class="regime-orb regime-inflation" data-target="inflation" role="button" tabindex="0" aria-pressed="false" style="left:70%; top:18%;">
+      <span>Inflationary</span>
+    </div>
+    <div class="regime-orb regime-crisis" data-target="crisis" role="button" tabindex="0" aria-pressed="true" style="left:41%; top:70%;">
+      <span>Crisis</span>
+    </div>
+  </div>
+  <div class="regime-detail" id="regime-detail" aria-live="polite">
+    <p>Cash floors rise directly with crisis probability, the volatility-harvest sleeve shuts off, and this is the one regime the entire crisis-convexity thesis is built to answer for. If the portfolio does not behave differently here, nothing else in this system matters.</p>
+  </div>
+</section>
+
+<section id="shield" class="section reveal">
+  <h2 class="section-title"><span class="section-num">03</span> The Mechanism We're Actually Selling</h2>
+  <p class="section-lede">Not "did it beat the market." Only: "what did it do when the market broke."</p>
+  <div class="shield-chart-wrap">
+    <div class="chart-disclosure">Illustrative shape only -- not a performance claim. See <a href="#compliance">Compliance</a> for why no live number appears here yet.</div>
+    <svg id="shield-svg" viewBox="0 0 800 260" class="shield-svg" role="img" aria-label="Illustrative drawdown shapes for benchmark and overlay">
+      <line x1="0" y1="200" x2="800" y2="200" class="axis-line" />
+      <path id="benchmark-path" class="benchmark-path" d="" />
+      <path id="strategy-path" class="strategy-path" d="" />
+      <text x="20" y="30" class="chart-label bench-label">Benchmark drawdown (illustrative)</text>
+      <text x="20" y="50" class="chart-label strat-label">Overlay behavior (illustrative)</text>
+    </svg>
+  </div>
+  <div class="metric-row">
+    <div class="metric-card">
+      <span class="metric-label">The metric we pre-registered</span>
+      <span class="metric-value metric-value-text">ERoD Beta</span>
+      <span class="metric-hint">Negative = pays specifically when the benchmark is in a deep drawdown. Defined before any result was measured.</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Where it must hold</span>
+      <span class="metric-value metric-value-text">2 of 3</span>
+      <span class="metric-hint">Independent crisis windows (2008, 2020, 2022). Fewer than that, and the claim is marked null -- publicly.</span>
+    </div>
+  </div>
+</section>
+
+<section id="harvest" class="section reveal">
+  <h2 class="section-title"><span class="section-num">04</span> A Second Return Stream, Gated on Purpose</h2>
+  <p class="section-lede">An optional volatility-premium overlay, deliberately leashed, because free lunches in this corner of the market have a body count.</p>
+  <div class="gate-toggle-wrap">
+    <div class="gate-toggle" id="gate-toggle">
+      <div class="gate-lamp gate-lamp-contango on" id="lamp-contango">
+        <span>Term structure: contango</span>
+      </div>
+      <div class="gate-lamp gate-lamp-crisis on" id="lamp-crisis">
+        <span>Crisis probability: low</span>
+      </div>
+      <div class="gate-result" id="gate-result">HARVEST: <span id="gate-status">ON</span></div>
+    </div>
+    <button type="button" id="volmageddon-btn" class="btn btn-ghost">Replay February 5, 2018</button>
+  </div>
+  <p class="section-footnote" id="harvest-footnote">
+    Fifteen percent of every dollar harvested is diverted into a tail-hedge asset,
+    untouched by the harvest itself, in case the field burns. This sleeve is off by
+    default (<code>vrp_overlay.enabled: false</code>, <code>live_enabled: false</code>)
+    and is ETF total-return only -- a listed short-vol ETF total-return series, not a buy recommendation.
+  </p>
+</section>
+
+<section id="transparency" class="section reveal">
+  <h2 class="section-title"><span class="section-num">05</span> Audit Trail, Not a Roadmap Slide</h2>
+  <p class="section-lede">
+    We publish build status the same way we will eventually publish performance: as it
+    actually is, not as a projection. This is the same discipline a risk committee
+    applies to us, applied to ourselves first.
+  </p>
+  <div class="timeline" id="timeline"></div>
+</section>
+
+<section id="gate" class="section reveal">
+  <h2 class="section-title"><span class="section-num">06</span> The Gate We Will Not Talk Around</h2>
+  <p class="section-lede">Four conditions, fixed in advance. It does not open until it opens on its own.</p>
+  <ul class="gate-conditions" id="gate-conditions"></ul>
+  <div class="gate-final" id="gate-final">
+    <span id="gate-final-text">cleared: false</span>
+    <p class="gate-final-sub">We would rather show you a red status than a number that is not earned yet.</p>
+  </div>
+</section>
+
+<section id="compliance" class="section reveal compliance-section">
+  <h2 class="section-title"><span class="section-num">07</span> Compliance, Up Front -- Not in the Fine Print</h2>
+  <div class="compliance-grid">
+    <div class="compliance-card">
+      <h4>What this site is</h4>
+      <p>Research software documentation. Nothing on this page is an offer, a
+        solicitation, or investment advice.</p>
+    </div>
+    <div class="compliance-card">
+      <h4>What this site is not</h4>
+      <p>A performance advertisement. Any backtested or hypothetical figures will only
+        be published with the criteria, assumptions, and risk disclosures required
+        under applicable marketing rules, to an audience for whom they are relevant.</p>
+    </div>
+    <div class="compliance-card">
+      <h4>Where we are today</h4>
+      <p>Pre-gate. No client capital under management. Go-to-market materials with
+        specific figures are locked internally until our own pre-registered statistical
+        gates clear.</p>
+    </div>
+    <div class="compliance-card">
+      <h4>Hypothetical performance (US)</h4>
+      <p>SEC Marketing Rule (IA-5653) mapping lives in the repo. Public homepages are the
+        wrong audience for ERoD/Sharpe tables. This page names the metric and the gate;
+        it does not show a result.</p>
+    </div>
+    <div class="compliance-card">
+      <h4>EU / Germany (BaFin)</h4>
+      <p>This site is research documentation for professional and institutional readers.
+        It is not a public offer of an investment product to retail clients in Germany or
+        the EEA. See the EU / BaFin note in the repository. Not legal advice.</p>
+    </div>
+  </div>
+  <p class="section-footnote">
+    Repo templates:
+    <a href="https://github.com/zauberstern/fioracle/blob/main/paper/compliance/HYPOTHETICAL_PERFORMANCE.md">HYPOTHETICAL_PERFORMANCE</a>,
+    <a href="https://github.com/zauberstern/fioracle/blob/main/paper/compliance/CTA_CFTC.md">CTA_CFTC</a>,
+    <a href="https://github.com/zauberstern/fioracle/blob/main/paper/compliance/risks_limitations.md">risks_limitations</a>,
+    <a href="https://github.com/zauberstern/fioracle/blob/main/paper/compliance/EU_BAFIN.md">EU_BAFIN</a>,
+    <a href="https://github.com/zauberstern/fioracle/blob/main/paper/compliance/SITE_RECORDKEEPING.md">SITE_RECORDKEEPING</a>.
+  </p>
+</section>
+
+<section id="manifesto" class="section reveal">
+  <h2 class="section-title"><span class="section-num">08</span> The Manifesto</h2>
+  <p class="section-lede">The full story lives as a readable screenplay. Here is the closing line.</p>
+  <blockquote class="typewriter-quote" id="typewriter-quote"></blockquote>
+  <div class="manifesto-actions">
+    <a href="manifesto.html" class="btn btn-ghost manifesto-link">Read the full screenplay</a>
+    <a href="leavebehind.html" class="btn btn-ghost manifesto-link">One-page leave-behind (print)</a>
+  </div>
+</section>
+
+<section id="briefing" class="section reveal briefing-section">
+  <h2 class="section-title"><span class="section-num">09</span> Two Ways to Engage</h2>
+  <div class="briefing-grid">
+    <div class="briefing-card">
+      <h3>Risk committees and allocators</h3>
+      <p>Request a briefing on the methodology, the gate status, and what "cleared: true"
+        will mean when it happens. No performance figures are shared outside a
+        documented, audience-appropriate context.</p>
+      <form id="briefing-form" method="POST" action="#">
+        <label>Organization <input name="organization" type="text" required autocomplete="organization" /></label>
+        <label>Role <input name="role" type="text" required /></label>
+        <label>Email <input name="email" type="email" required autocomplete="email" /></label>
+        <label>Message <textarea name="message" rows="3" required></textarea></label>
+        <label class="checkbox-label">
+          <input name="professional_not_retail" type="checkbox" required />
+          I am contacting on behalf of a professional / institutional research interest (not retail product marketing).
+        </label>
+        <input type="hidden" name="utm_source" id="utm_source" value="" />
+        <input type="hidden" name="utm_medium" id="utm_medium" value="" />
+        <input type="hidden" name="ref" id="utm_ref" value="" />
+        <button type="submit" id="briefing-submit" class="btn btn-primary" disabled>Request a Briefing</button>
+      </form>
+      <p class="placeholder-note" id="form-placeholder-note">Form endpoint is a placeholder. Use email or replace formspreeId before publish.</p>
+      <a id="mailto-fallback" class="btn btn-ghost" href="#">Email fallback</a>
+      <p class="placeholder-note" id="email-placeholder-note">Email is a placeholder until publish.</p>
+    </div>
+    <div class="briefing-card">
+      <h3>Researchers and contributors</h3>
+      <p>Read the replication package, the ablation registry, and the open experiment
+        classes. MIT licensed. Issues and pull requests welcome.</p>
+      <a id="github-link" href="https://github.com/zauberstern/fioracle" class="btn btn-ghost">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>FIOracle is research software. Nothing on this site is investment advice, a
+    solicitation, or a performance claim outside the criteria and assumptions
+    documented in the replication package. See the Compliance section above.</p>
+  <p class="footer-links">
+    <a href="https://github.com/zauberstern/fioracle">GitHub</a> ·
+    <a href="https://github.com/zauberstern/fioracle/blob/main/LICENSE">LICENSE</a> ·
+    <a href="#compliance">Compliance</a> ·
+    <a href="manifesto.html">Manifesto</a> ·
+    <a href="leavebehind.html">Leave-behind</a>
+  </p>
+  <p class="footer-small">Built as a work of art and a working thesis. MIT licensed.</p>
+  <p class="footer-version">
+    Site copy v<span data-site-version>0.2.0</span> --
+    <span data-published-date>2026-09-02</span> --
+    <a href="https://github.com/zauberstern/fioracle/blob/main/CHANGELOG.md">changelog</a>
+  </p>
+</footer>
+
+<script src="site-config.js"></script>
+<script src="vendor/anime-3.2.1.min.js" defer></script>
+<script src="script.js" defer></script>
+</body>
+</html>

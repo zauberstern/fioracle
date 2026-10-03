@@ -1,0 +1,281 @@
+{
+  "champion": {
+    "algo": "sac",
+    "model": "output/hedge_diagnostics/models/champion_storage.zip",
+    "gate": {
+      "wins": 3,
+      "n_windows": 3,
+      "min_entropy": 0.6241689393488717,
+      "min_wins_required": 2,
+      "min_entropy_required": 0.4,
+      "cleared": true,
+      "status": "cleared"
+    },
+    "mean_rl_sharpe": -1.769020032493459,
+    "tearsheet": {
+      "sharpe": -2.835893906201666,
+      "sortino": -3.490072669597719,
+      "max_dd": -7.072288401537892,
+      "es95": -0.10143294902881612,
+      "erod": 969.0754830178938,
+      "n_days": 941,
+      "action_entropy": 0.6620342095960268,
+      "vectorbt_available": true
+    }
+  },
+  "algos": [
+    {
+      "algo": "ppo",
+      "model": "output/hedge_diagnostics/models/ppo_storage.zip",
+      "windows": [
+        {
+          "rl_sum": -0.009928681011612706,
+          "ri_sum": -0.4892291385872357,
+          "rl_sharpe": -0.023699776337878765,
+          "ri_sharpe": -8.798816184435804,
+          "rl_max_dd": -0.8207130255429013,
+          "rl_es95": -0.05998621329910833,
+          "rl_erod": 29.396155139355486,
+          "action_entropy": 0.6872479837264373,
+          "n_days": 215,
+          "rl_beats_ri_sharpe": true,
+          "window": "2020_covid",
+          "algo": "ppo",
+          "action_counts": {
+            "0": 14,
+            "1": 164,
+            "2": 37
+          }
+        },
+        {
+          "rl_sum": -1.6157356742388047,
+          "ri_sum": -0.38421795580126583,
+          "rl_sharpe": -2.7513863821415674,
+          "ri_sharpe": -5.130624413154978,
+          "rl_max_dd": -1.922390447288553,
+          "rl_es95": -0.10739664561979194,
+          "rl_erod": 2.430101274868024,
+          "action_entropy": 0.8733725978038642,
+          "n_days": 237,
+          "rl_beats_ri_sharpe": true,
+          "window": "2022_crisis",
+          "algo": "ppo",
+          "action_counts": {
+            "0": 40,
+            "1": 40,
+            "2": 157
+          }
+        },
+        {
+          "rl_sum": -5.097027959007813,
+          "ri_sum": -1.6185032656206264,
+          "rl_sharpe": -3.4082956309699712,
+          "ri_sharpe": -15.218832042834594,
+          "rl_max_dd": -5.248739375665661,
+          "rl_es95": -0.11549288501382694,
+          "rl_erod": 866.327364276322,
+          "action_entropy": 0.7960123726383121,
+          "n_days": 512,
+          "rl_beats_ri_sharpe": true,
+          "window": "2023_24",
+          "algo": "ppo",
+          "action_counts": {
+            "0": 20,
+            "1": 312,
+            "2": 180
+          }
+        }
+      ],
+      "gate": {
+        "wins": 3,
+        "n_windows": 3,
+        "min_entropy": 0.6872479837264373,
+        "min_wins_required": 2,
+        "min_entropy_required": 0.4,
+        "cleared": true,
+        "status": "cleared"
+      },
+      "tearsheet_2023": {
+        "sharpe": -2.9867992199351097,
+        "sortino": -3.6586455978525567,
+        "max_dd": -7.4753351207672445,
+        "es95": -0.10322640906377419,
+        "erod": 1221.7158088410322,
+        "n_days": 941,
+        "action_entropy": 0.9031851667078247,
+        "vectorbt_available": true
+      },
+      "mean_rl_sharpe": -2.0611272631498054
+    },
+    {
+      "algo": "sac",
+      "model": "output/hedge_diagnostics/models/sac_storage.zip",
+      "windows": [
+        {
+          "rl_sum": -0.03218012311677865,
+          "ri_sum": -0.4892291385872357,
+          "rl_sharpe": -0.06562536954699529,
+          "ri_sharpe": -8.798816184435804,
+          "rl_max_dd": -1.0281110543518945,
+          "rl_es95": -0.07221587279672893,
+          "rl_erod": 32.88204897589119,
+          "action_entropy": 0.6813211479951609,
+          "n_days": 215,
+          "rl_beats_ri_sharpe": true,
+          "window": "2020_covid",
+          "algo": "sac",
+          "action_counts": {
+            "0": 91,
+            "2": 124
+          }
+        },
+        {
+          "rl_sum": -1.2380579212626308,
+          "ri_sum": -0.38421795580126583,
+          "rl_sharpe": -2.2350283958620465,
+          "ri_sharpe": -5.130624413154978,
+          "rl_max_dd": -1.502991472681255,
+          "rl_es95": -0.09847867638734302,
+          "rl_erod": 3.109141370468958,
+          "action_entropy": 0.6241689393488717,
+          "n_days": 237,
+          "rl_beats_ri_sharpe": true,
+          "window": "2022_crisis",
+          "algo": "sac",
+          "action_counts": {
+            "0": 75,
+            "2": 162
+          }
+        },
+        {
+          "rl_sum": -4.389853565925452,
+          "ri_sum": -1.6185032656206264,
+          "rl_sharpe": -3.006406332071336,
+          "ri_sharpe": -15.218832042834594,
+          "rl_max_dd": -4.862823273877926,
+          "rl_es95": -0.11224214123957132,
+          "rl_erod": 671.0083605035675,
+          "action_entropy": 0.6885805612724201,
+          "n_days": 512,
+          "rl_beats_ri_sharpe": true,
+          "window": "2023_24",
+          "algo": "sac",
+          "action_counts": {
+            "0": 208,
+            "1": 1,
+            "2": 303
+          }
+        }
+      ],
+      "gate": {
+        "wins": 3,
+        "n_windows": 3,
+        "min_entropy": 0.6241689393488717,
+        "min_wins_required": 2,
+        "min_entropy_required": 0.4,
+        "cleared": true,
+        "status": "cleared"
+      },
+      "tearsheet_2023": {
+        "sharpe": -2.835893906201666,
+        "sortino": -3.490072669597719,
+        "max_dd": -7.072288401537892,
+        "es95": -0.10143294902881612,
+        "erod": 969.0754830178938,
+        "n_days": 941,
+        "action_entropy": 0.6620342095960268,
+        "vectorbt_available": true
+      },
+      "mean_rl_sharpe": -1.769020032493459
+    },
+    {
+      "algo": "dqn",
+      "model": "output/hedge_diagnostics/models/dqn_storage.zip",
+      "windows": [
+        {
+          "rl_sum": -0.6303899985136799,
+          "ri_sum": -0.4892291385872357,
+          "rl_sharpe": -2.5313808501661708,
+          "ri_sharpe": -8.798816184435804,
+          "rl_max_dd": -0.7559172630171493,
+          "rl_es95": -0.03747452065950305,
+          "rl_erod": 4.054280989089248,
+          "action_entropy": 0.5870864786748529,
+          "n_days": 215,
+          "rl_beats_ri_sharpe": true,
+          "window": "2020_covid",
+          "algo": "dqn",
+          "action_counts": {
+            "0": 49,
+            "1": 164,
+            "2": 2
+          }
+        },
+        {
+          "rl_sum": -1.5759772075920462,
+          "ri_sum": -0.38421795580126583,
+          "rl_sharpe": -4.387944431797297,
+          "ri_sharpe": -5.130624413154978,
+          "rl_max_dd": -1.8536962468903635,
+          "rl_es95": -0.06503364193661505,
+          "rl_erod": 2.246344821308345,
+          "action_entropy": 0.3424485784603385,
+          "n_days": 237,
+          "rl_beats_ri_sharpe": true,
+          "window": "2022_crisis",
+          "algo": "dqn",
+          "action_counts": {
+            "0": 17,
+            "1": 216,
+            "2": 4
+          }
+        },
+        {
+          "rl_sum": -6.137222432894609,
+          "ri_sum": -1.6185032656206264,
+          "rl_sharpe": -9.767357029903891,
+          "ri_sharpe": -15.218832042834594,
+          "rl_max_dd": -6.133155480894611,
+          "rl_es95": -0.05020910384287394,
+          "rl_erod": 557.851619646249,
+          "action_entropy": 0.8622071058629662,
+          "n_days": 512,
+          "rl_beats_ri_sharpe": true,
+          "window": "2023_24",
+          "algo": "dqn",
+          "action_counts": {
+            "0": 168,
+            "1": 307,
+            "2": 37
+          }
+        }
+      ],
+      "gate": {
+        "wins": 3,
+        "n_windows": 3,
+        "min_entropy": 0.3424485784603385,
+        "min_wins_required": 2,
+        "min_entropy_required": 0.4,
+        "cleared": false,
+        "status": "not_cleared"
+      },
+      "tearsheet_2023": {
+        "sharpe": -12.529867930834056,
+        "sortino": -10.714529445884864,
+        "max_dd": -11.537061365741444,
+        "es95": -0.0408620551733282,
+        "erod": 1279.82990252103,
+        "n_days": 941,
+        "action_entropy": 0.9109266670030591,
+        "vectorbt_available": true
+      },
+      "mean_rl_sharpe": -5.56222743728912
+    }
+  ],
+  "rl_status": "cleared",
+  "stress_windows": [
+    "2020_covid",
+    "2022_crisis",
+    "2023_24"
+  ]
+}
