@@ -9,6 +9,7 @@ import { HintProvider } from "../ui/Hint";
 import { useMarketStore } from "../../store/marketStore";
 import { useHistoryTape } from "../../hooks/useHistoryTape";
 import { useWebSocket } from "../../hooks/useWebSocket";
+import { readPin } from "../../shell/readPin";
 import meridianLogo from "../../assets/meridian-logo.png";
 
 const NAV: Array<{ view: ReadingView; label: string }> = [
@@ -28,7 +29,7 @@ export type ReadingView =
   | "about";
 
 function parseHash(hash: string): ReadingView {
-  const h = hash.replace(/^#\/?/, "").toLowerCase();
+  const h = hash.replace(/^#\/?/, "").split("?")[0].toLowerCase();
   if (h === "closer") return "closer";
   if (h === "then") return "then";
   if (h === "stillmoor") return "stillmoor";
@@ -50,6 +51,16 @@ export function AppShell() {
   const [view, setView] = useState<ReadingView>(() =>
     typeof window !== "undefined" ? parseHash(window.location.hash) : "home"
   );
+
+  useEffect(() => {
+    const pin = readPin(window.location.hash);
+    if (pin.asof) {
+      useMarketStore.getState().setReplayTimestamp(Date.parse(`${pin.asof}T00:00:00Z`) / 1000);
+    }
+    if (pin.book) {
+      useMarketStore.getState().setCurrentAsset(pin.book);
+    }
+  }, []);
 
   useEffect(() => {
     const onHash = () => setView(parseHash(window.location.hash));
