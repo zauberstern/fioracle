@@ -11,10 +11,17 @@ describe("pitchPlain", () => {
   const text = pitchPlain();
 
   it("names the score and keeps the weights in the equations", () => {
-    expect(text.startsWith("Quiet: under 40.")).toBe(true);
-    expect(text).toMatch(/Warming: from 40\./);
-    expect(text).toMatch(/Stretched: from 70\./);
+    expect(text).toMatch(/Park cash on the week page/);
+    expect(text).toMatch(/direct mark/);
+    expect(text).toMatch(/indirect miss/);
+    expect(text).toMatch(/three small pies/);
+    expect(text).toMatch(/Quiet is under 40/);
+    expect(text).toMatch(/Warming starts at 40/);
+    expect(text).toMatch(/Stretched starts at 70/);
     expect(text).toMatch(/stops at 100/);
+    expect(text).toMatch(/DLinear/);
+    expect(text).toMatch(/Phillips-Shi-Yu/);
+    expect(text).toMatch(/log-periodic/);
     expect(text).toMatch(/\\times 12/);
     expect(text).toMatch(/\\min\(40/);
     expect(text).toMatch(/25 \+ \\max\(0, s - c\) \\times 8/);

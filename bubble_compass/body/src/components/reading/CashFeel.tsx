@@ -3,8 +3,10 @@ import {
   dollarDelta,
   feelLine,
   gistTag,
+  pieConic,
   rankBasket,
   type BookMove,
+  type MixPie,
 } from "../../narrator/cashFeel";
 import type { StatusWord } from "../../narrator/heat";
 
@@ -40,6 +42,26 @@ function money(n: number): string {
   return (n < 0 ? "-" : "+") + body;
 }
 
+function Pie({ pie, title }: { pie: MixPie; title: string }) {
+  const tip = pie.slices.map((s) => `${s.group} ${s.pct.toFixed(0)}%`).join(", ");
+  return (
+    <li className="cash-feel-pie" title={tip || "No weights this mark"}>
+      <span
+        className="cash-feel-disc"
+        style={{ background: pieConic(pie.slices) }}
+        aria-hidden="true"
+      />
+      <div>
+        <strong>{title}</strong>
+        <span>
+          {pie.delta != null ? money(pie.delta) : "n/a"}
+          {pie.slices[0] ? ` · ${pie.slices[0].group} ${pie.slices[0].pct.toFixed(0)}%` : ""}
+        </span>
+      </div>
+    </li>
+  );
+}
+
 type Props = {
   date: string;
   heat: number;
@@ -65,36 +87,33 @@ export function CashFeel({ date, heat, word, moves, hotName, hotRet }: Props) {
 
   const ranked = useMemo(() => rankBasket(moves, amount), [moves, amount]);
   const cashDelta = ranked.cash?.delta ?? 0;
-  const bestDelta = ranked.best?.delta ?? 0;
-  const worstDelta = ranked.worst?.delta ?? 0;
+  const bestDelta = ranked.best.delta ?? 0;
+  const worstDelta = ranked.worst.delta ?? 0;
   const hotDelta = dollarDelta(amount, hotRet);
   const status: StatusWord = word === "Loading" ? "Quiet" : word;
-  const tag =
-    ranked.best && ranked.worst
-      ? gistTag({
-          word: status,
-          cashDelta,
-          bestDelta,
-          worstDelta,
-          hotDelta,
-        })
-      : "loading";
+  const ready =
+    ranked.best.slices.length > 0 ||
+    ranked.smooth.slices.length > 0 ||
+    ranked.worst.slices.length > 0;
+  const tag = ready
+    ? gistTag({
+        word: status,
+        cashDelta,
+        bestDelta,
+        worstDelta,
+        hotDelta,
+      })
+    : "loading";
   const line =
-    ranked.best && ranked.worst && ranked.smooth && ranked.cash
+    ranked.cash && ready
       ? feelLine({
           amount,
           currency,
           date,
           cashName: ranked.cash.name,
           cashDelta,
-          bestName: ranked.best.name,
           bestDelta,
-          bestGroup: ranked.best.group,
-          smoothName: ranked.smooth.name,
-          smoothGroup: ranked.smooth.group,
-          worstName: ranked.worst.name,
           worstDelta,
-          worstGroup: ranked.worst.group,
           heat,
           word: status,
         })
@@ -131,28 +150,15 @@ export function CashFeel({ date, heat, word, moves, hotName, hotRet }: Props) {
             ))}
           </select>
         </label>
+        <p className="cash-feel-tag">{tag}</p>
       </div>
-      <p className="cash-feel-tag">{tag}</p>
-      {ranked.best && ranked.worst && ranked.smooth ? (
-        <ul className="cash-feel-ranks">
-          <li>
-            <span>Best this mark</span>
-            <strong>
-              {ranked.best.name} {money(ranked.best.delta)}
-            </strong>
-          </li>
-          <li>
-            <span>Smoothest ride</span>
-            <strong>{ranked.smooth.name}</strong>
-          </li>
-          <li>
-            <span>Worst this mark</span>
-            <strong>
-              {ranked.worst.name} {money(ranked.worst.delta)}
-            </strong>
-          </li>
+      {ready ? (
+        <ul className="cash-feel-pies">
+          <Pie pie={ranked.best} title="Best mix" />
+          <Pie pie={ranked.smooth} title="Smoothest" />
+          <Pie pie={ranked.worst} title="Worst mix" />
           {ranked.cash ? (
-            <li>
+            <li className="cash-feel-cash">
               <span>Your pile</span>
               <strong>
                 {ranked.cash.name} {money(ranked.cash.delta)}
@@ -165,13 +171,12 @@ export function CashFeel({ date, heat, word, moves, hotName, hotRet }: Props) {
       )}
       {hotName && hotDelta != null ? (
         <p className="cash-feel-hot">
-          Heat leader {hotName} {money(hotDelta)} this mark.
+          Hottest book {hotName} {money(hotDelta)}.
         </p>
       ) : null}
       <p className="cash-feel-line">{line}</p>
       <p className="cash-feel-note">
-        Figures apply the USD total-return tape to the number you typed. They are
-        not converted at an FX rate.
+        USD total-return tape on the number you typed. No FX conversion.
       </p>
     </aside>
   );

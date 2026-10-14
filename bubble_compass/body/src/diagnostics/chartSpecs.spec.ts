@@ -188,7 +188,7 @@ describe("buildCharts", () => {
     expect(trace.y).toEqual(production.map((s) => s.label));
     const margin = built.heat.layout.margin as { l: number };
     const yaxis = built.heat.layout.yaxis as { automargin?: boolean };
-    expect(margin.l).toBeGreaterThanOrEqual(148);
+    expect(margin.l).toBeGreaterThanOrEqual(100);
     expect(yaxis.automargin).toBe(true);
   });
 

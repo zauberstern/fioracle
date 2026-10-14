@@ -47,6 +47,13 @@ describe("rankBasket", () => {
       trail: [0.02, 0.03, 0.05, 0.04],
     },
     {
+      id: "ig",
+      name: "US company bonds",
+      group: "US credit",
+      ret: 0.01,
+      trail: [0.008, 0.01, 0.012, 0.01],
+    },
+    {
       id: "oil",
       name: "Oil",
       group: "Commodities",
@@ -62,20 +69,35 @@ describe("rankBasket", () => {
     },
   ];
 
-  it("names best, worst, and smoothest from the tape, and keeps cash aside", () => {
+  it("builds group pies for best, smooth, and worst mixes, and keeps cash aside", () => {
     const ranked = rankBasket(moves, 100_000);
-    expect(ranked.best?.name).toBe("US junk bonds");
-    expect(ranked.best?.delta).toBe(4000);
-    expect(ranked.best?.group).toBe("US credit");
-    expect(ranked.worst?.name).toBe("Oil");
-    expect(ranked.worst?.delta).toBe(-3000);
-    expect(ranked.smooth?.name).toBe("US Treasuries");
     expect(ranked.cash?.delta).toBe(100);
-    expect(ranked.byGroup.map((g) => g.group)).toEqual([
+
+    expect(ranked.best.slices.map((s) => s.group)).toEqual([
       "US credit",
       "US rates",
-      "Commodities",
     ]);
+    const bestCredit = ranked.best.slices.find((s) => s.group === "US credit")!;
+    const bestRates = ranked.best.slices.find((s) => s.group === "US rates")!;
+    // weights: hy 0.04, ig 0.01, ust 0.008 → credit 0.05/0.058, rates 0.008/0.058
+    expect(bestCredit.pct).toBeCloseTo((0.05 / 0.058) * 100, 5);
+    expect(bestRates.pct).toBeCloseTo((0.008 / 0.058) * 100, 5);
+    expect(ranked.best.slices.reduce((a, s) => a + s.pct, 0)).toBeCloseTo(100, 5);
+    expect(ranked.best.delta).toBeCloseTo(
+      100_000 * ((0.04 * 0.04 + 0.01 * 0.01 + 0.008 * 0.008) / 0.058),
+      5
+    );
+
+    expect(ranked.smooth.slices[0]?.group).toBe("US rates");
+    expect(ranked.smooth.slices.reduce((a, s) => a + s.pct, 0)).toBeCloseTo(
+      100,
+      5
+    );
+
+    expect(ranked.worst.slices).toEqual([{ group: "Commodities", pct: 100 }]);
+    expect(ranked.worst.delta).toBe(-3000);
+
+    expect(ranked.best.slices.every((s) => s.group !== "Cash")).toBe(true);
   });
 });
 
@@ -118,31 +140,27 @@ describe("gistTag", () => {
 });
 
 describe("feelLine", () => {
-  it("states the last tape mark in dollars without calling it a forecast", () => {
+  it("states direct cash move, indirect miss, and heat without naming a single book as the portfolio", () => {
     const line = feelLine({
       amount: 100000,
       currency: "USD",
       date: "12 Jan 2026",
       cashName: "US T-bills",
       cashDelta: 14,
-      bestName: "US junk bonds",
       bestDelta: 1840,
-      bestGroup: "US credit",
-      smoothName: "US Treasuries",
-      smoothGroup: "US rates",
-      worstName: "Oil",
       worstDelta: -310,
-      worstGroup: "Commodities",
       heat: 72,
       word: "Stretched",
     });
     expect(line).toMatch(/12 Jan 2026/);
     expect(line).toMatch(/100,000 USD/);
     expect(line).toMatch(/US T-bills/);
-    expect(line).toMatch(/US junk bonds/);
-    expect(line).toMatch(/Oil/);
+    expect(line).toMatch(/direct/i);
+    expect(line).toMatch(/indirect/i);
     expect(line).toMatch(/Stretched/);
     expect(line).toMatch(/72/);
+    expect(line).toMatch(/group/);
+    expect(line).not.toMatch(/US junk bonds/);
     expect(line).not.toMatch(/Sharpe/);
     expect(line).not.toMatch(/forecast/);
     expect(line).not.toMatch(/—/);

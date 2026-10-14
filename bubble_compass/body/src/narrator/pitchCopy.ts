@@ -1,12 +1,13 @@
 export type PitchBlock = { kind: "p" | "eq" | "h"; text: string };
 
 export const PITCH_BLOCKS: readonly PitchBlock[] = [
-  { kind: "p", text: "Quiet: under 40." },
-  { kind: "p", text: "Warming: from 40." },
-  { kind: "p", text: "Stretched: from 70." },
   {
     kind: "p",
-    text: "The number adds distance above the book's path and a fast-rise check, and it stops at 100.",
+    text: "Park cash on the week page and the card shows the direct mark on that pile, the indirect miss versus the best mix of book groups, and three small pies: weights by last-mark gain, by smooth ride, and by last-mark loss, rolled up to group percent. Heat is why those mixes matter.",
+  },
+  {
+    kind: "p",
+    text: "Quiet is under 40. Warming starts at 40. Stretched starts at 70. The score stops at 100. It is path distance above a DLinear trend plus a Phillips-Shi-Yu fast-rise screen; a log-periodic break fit and a news-tone term stay in the sum and add 0 on this history.",
   },
   { kind: "h", text: "The pin" },
   {

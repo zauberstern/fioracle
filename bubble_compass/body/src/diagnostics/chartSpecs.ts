@@ -123,12 +123,15 @@ function timeLayout(
     plot_bgcolor: READING.page,
     font: { family: "IBM Plex Sans, sans-serif", size: 14, color: READING.ink },
     showlegend: false,
-    margin: { t: 8, r: 16, b: 36, l: 44 },
+    margin: { t: 4, r: 8, b: 28, l: 36 },
+    autosize: true,
     xaxis: {
       type: "date",
       hoverformat: "%d %b %Y",
+      automargin: true,
       ...(xRange ? { range: xRange, autorange: false } : {}),
     },
+    yaxis: { automargin: true },
     ...(pin
       ? {
           shapes: [
@@ -224,9 +227,15 @@ export function buildCharts(opts: {
       ...baseLayout(""),
       title: undefined,
       dragmode: false,
+      autosize: true,
       height: Math.max(360, sleeves.length * 22 + 96),
-      margin: { t: 8, r: 24, b: 36, l: 160 },
-      xaxis: { range: [0, 100], title: "Heat", fixedrange: true },
+      margin: { t: 4, r: 8, b: 28, l: 120 },
+      xaxis: {
+        range: [0, 100],
+        title: { text: "Heat", standoff: 4 },
+        fixedrange: true,
+        automargin: true,
+      },
       yaxis: { autorange: "reversed", automargin: true, fixedrange: true },
       showlegend: false,
     },
@@ -346,7 +355,12 @@ export function buildCharts(opts: {
     ],
     layout: {
       ...timeLayout(xRange, pin),
-      yaxis: { title: "Percent", range: [0, 100], zeroline: false },
+      yaxis: {
+        title: "Percent",
+        range: [0, 100],
+        zeroline: false,
+        automargin: true,
+      },
     },
   };
 
