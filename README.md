@@ -381,7 +381,3 @@ Shu, Yu & Mulvey (2024), *Dynamic Asset Allocation with Asset-Specific Regime Fo
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
-
-<p align="center">
-  <sub>Built with ❤️ for quantitative research</sub>
-</p>
