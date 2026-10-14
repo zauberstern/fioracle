@@ -20,7 +20,9 @@ import {
   spineSentence,
   type HeatParts,
 } from "../../narrator/scoreCopy";
+import { trailReturns, type BookMove } from "../../narrator/cashFeel";
 import { BookMatrix } from "./BookMatrix";
+import { CashFeel } from "./CashFeel";
 import { HeatField, type HeatCol } from "./HeatField";
 import { StatusMark } from "./StatusMark";
 import { TalkRail } from "./TalkRail";
@@ -38,6 +40,11 @@ const MARK_IDS = [
 type CardState = {
   key: string;
   name: string;
+  short: string;
+  plain: string;
+  mark: string;
+  hint: string;
+  group: string;
   heat: number;
   word: ReturnType<typeof statusWord>;
   lines: string[];
@@ -95,6 +102,11 @@ function cardsFromLayers(
     return {
       key: book.id,
       name: book.name,
+      short: book.short,
+      plain: book.plain,
+      mark: book.mark,
+      hint: book.hint,
+      group: book.group,
       heat: reading.heat,
       word: reading.word,
       lines: reading.lines,
@@ -118,13 +130,13 @@ function groupLine(cards: CardState[]): string {
   if (n === 0) return "";
   if (stretched > 0) {
     return stretched === 1
-      ? `1 of ${n} books is stretched.`
-      : `${stretched} of ${n} books are stretched.`;
+      ? `1 of ${n} books is at 70 or higher, Stretched.`
+      : `${stretched} of ${n} books are at 70 or higher, Stretched.`;
   }
   if (warming > 0) {
     return warming === 1
-      ? `1 of ${n} books is warming.`
-      : `${warming} of ${n} books are warming.`;
+      ? `1 of ${n} books is from 40 and under 70, Warming.`
+      : `${warming} of ${n} books are from 40 and under 70, Warming.`;
   }
   return `All ${n} books are under 40.`;
 }
@@ -184,15 +196,39 @@ export function WeeklyReading() {
     };
   }, []);
 
+  const spine = useMemo(() => {
+    const stocks = layerCache.get("SP500_TOTAL_RETURN");
+    const fromStocks = spineDates(stocks);
+    if (fromStocks.length) return fromStocks;
+    let best: string[] = [];
+    for (const layers of layerCache.values()) {
+      const dates = spineDates(layers);
+      if (dates.length > best.length) best = dates;
+    }
+    return best;
+  }, [layerCache]);
+
+  const sliderIndex = useMemo(() => {
+    if (!spine.length) return 0;
+    if (!asOf) return spine.length - 1;
+    let best = 0;
+    for (let i = 0; i < spine.length; i++) {
+      if (spine[i]! <= asOf) best = i;
+    }
+    return best;
+  }, [spine, asOf]);
+
+  const pinnedDate = spine[sliderIndex] || asOf;
+
   useEffect(() => {
     if (!layerCache.size) return;
-    const pin = asOf || undefined;
+    const pin = pinnedDate || undefined;
     const { tips, cards } = cardsFromLayers(layerCache, pin);
     setSleeveTips(tips);
     setCrowd(cards);
-  }, [asOf, layerCache]);
+  }, [pinnedDate, layerCache]);
 
-  const pin = asOf || undefined;
+  const pin = pinnedDate || undefined;
   const creditRows = rawLayers.credit_trajectory ?? [];
   const creditRow = pin
     ? rowOnOrBefore(creditRows, pin)
@@ -205,7 +241,7 @@ export function WeeklyReading() {
       sleeveTips.length > 0
         ? sleeveTips
         : [buildSleeveTip(currentAsset, rawLayers, pin)],
-    asOf: asOf || "unknown",
+    asOf: pinnedDate || "unknown",
     selectedId: currentAsset,
     regimeState: regime.regimeState,
     credit: {
@@ -230,33 +266,11 @@ export function WeeklyReading() {
   const oneLine = hero.sentence;
 
   const tipAgeDays = (() => {
-    if (!asOf) return 0;
-    const tip = Date.parse(`${asOf}T00:00:00Z`);
+    if (!pinnedDate) return 0;
+    const tip = Date.parse(`${pinnedDate}T00:00:00Z`);
     if (!Number.isFinite(tip)) return 0;
     return Math.floor((Date.now() - tip) / 86400000);
   })();
-
-  const spine = useMemo(() => {
-    const stocks = layerCache.get("SP500_TOTAL_RETURN");
-    const fromStocks = spineDates(stocks);
-    if (fromStocks.length) return fromStocks;
-    let best: string[] = [];
-    for (const layers of layerCache.values()) {
-      const dates = spineDates(layers);
-      if (dates.length > best.length) best = dates;
-    }
-    return best;
-  }, [layerCache]);
-
-  const sliderIndex = useMemo(() => {
-    if (!spine.length) return 0;
-    if (!asOf) return spine.length - 1;
-    let best = 0;
-    for (let i = 0; i < spine.length; i++) {
-      if (spine[i]! <= asOf) best = i;
-    }
-    return best;
-  }, [spine, asOf]);
 
   const heatCols = useMemo<HeatCol[]>(() => {
     if (!spine.length) return [];
@@ -319,7 +333,19 @@ export function WeeklyReading() {
     const card = crowd.find((c) => c.key === book.id);
     return card ? [card] : [];
   });
-  const dateLabel = asOf ? plainDate(asOf) : "Date still loading.";
+  const dateLabel = pinnedDate ? plainDate(pinnedDate) : "Date still loading.";
+  const feelMoves: BookMove[] = BOOKS.map((book) => {
+    const card = crowd.find((c) => c.key === book.id);
+    const layers = layerCache.get(book.id);
+    return {
+      id: book.id,
+      name: book.plain,
+      group: book.group,
+      cash: book.cash,
+      ret: card?.dailyReturn ?? null,
+      trail: pin ? trailReturns(layers?.dlinear ?? [], pin, 6) : [],
+    };
+  });
 
   return (
     <div className="weekly-reading">
@@ -337,9 +363,22 @@ export function WeeklyReading() {
               {word}
             </h1>
           </div>
+          <CashFeel
+            date={dateLabel}
+            heat={heat}
+            word={word}
+            moves={feelMoves}
+            hotName={leader && !leader.cash ? leader.plain : null}
+            hotRet={leader && !leader.cash ? leader.dailyReturn : null}
+          />
           <p className="weekly-heat">
             <span className="weekly-heat-label">Heat</span>
             <span className="weekly-heat-num">{heat}</span>
+            <span className="heat-track" aria-hidden="true">
+              <span style={{ width: `${Math.min(100, Math.max(0, heat))}%` }} />
+              <i className="heat-tick mid" />
+              <i className="heat-tick high" />
+            </span>
           </p>
         </div>
         <p className="weekly-sentence">{oneLine}</p>
@@ -349,13 +388,24 @@ export function WeeklyReading() {
         <p className={tipAgeDays > 8 ? "weekly-asof weekly-asof-stale" : "weekly-asof"}>
           {dateLabel}
         </p>
-        <button
-          type="button"
-          className="weekly-means"
-          onClick={() => setTalkOpen(true)}
-        >
-          Ask the reading
-        </button>
+        <label className="week-hero-date" htmlFor="week-date">
+          <input
+            id="week-date"
+            type="range"
+            min={0}
+            max={Math.max(0, spine.length - 1)}
+            value={sliderIndex}
+            disabled={spine.length === 0}
+            aria-valuemin={0}
+            aria-valuemax={Math.max(0, spine.length - 1)}
+            aria-valuenow={sliderIndex}
+            aria-valuetext={dateLabel}
+            onChange={(e) => {
+              const d = spine[Number(e.target.value)];
+              if (d) setReplayTimestamp(isoToUnix(d));
+            }}
+          />
+        </label>
       </section>
 
       <section className="week-stage" aria-label="Books across the history">
@@ -382,23 +432,6 @@ export function WeeklyReading() {
       </section>
 
       <section className="week-scrub" aria-label="Date">
-        <label htmlFor="week-date">{dateLabel}</label>
-        <input
-          id="week-date"
-          type="range"
-          min={0}
-          max={Math.max(0, spine.length - 1)}
-          value={sliderIndex}
-          disabled={spine.length === 0}
-          aria-valuemin={0}
-          aria-valuemax={Math.max(0, spine.length - 1)}
-          aria-valuenow={sliderIndex}
-          aria-valuetext={dateLabel}
-          onChange={(e) => {
-            const d = spine[Number(e.target.value)];
-            if (d) setReplayTimestamp(isoToUnix(d));
-          }}
-        />
         <p className="week-jump-help">Choose a date and the slider moves to it.</p>
         <div className="week-jumps">
           {EPISODES.map((ep) => {
@@ -427,6 +460,13 @@ export function WeeklyReading() {
             );
           })}
         </div>
+        <button
+          type="button"
+          className="weekly-means"
+          onClick={() => setTalkOpen(true)}
+        >
+          Ask the reading
+        </button>
       </section>
 
       <section className="week-prose">

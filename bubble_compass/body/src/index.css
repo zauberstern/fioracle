@@ -111,7 +111,8 @@ body,
 .reading-brand img {
   display: block;
   height: 40px;
-  width: auto;
+  width: 40px;
+  object-fit: contain;
 }
 
 .reading-nav {
@@ -898,12 +899,12 @@ body,
 }
 
 .weekly-mast {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 32px;
-  padding: 4px 0 24px;
-  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 20px 28px;
+  padding: 4px 0 20px;
+  margin-bottom: 16px;
   border-bottom: 1px solid #171a20;
 }
 
@@ -946,6 +947,43 @@ body,
   color: #5c5e62;
 }
 
+.heat-track {
+  position: relative;
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  margin-left: 10px;
+  vertical-align: middle;
+  background: #d5cfc3;
+}
+.heat-track > span {
+  display: block;
+  height: 100%;
+  background: #1c1b19;
+}
+.heat-tick {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  background: #6e685f;
+}
+.heat-tick.mid {
+  left: 40%;
+  height: 12px;
+}
+.heat-tick.high {
+  left: 70%;
+  height: 16px;
+  background: #1c1b19;
+}
+.week-hero-date {
+  display: block;
+  margin-top: 12px;
+}
+.week-hero-date input[type="range"] {
+  width: min(100%, 420px);
+  accent-color: #1c1b19;
+}
 .weekly-mast .weekly-heat-num {
   display: block;
   font-size: clamp(48px, 6vw, 72px);
@@ -953,6 +991,76 @@ body,
   letter-spacing: -0.04em;
   line-height: 0.92;
   color: #171a20;
+}
+
+.cash-feel {
+  min-width: 0;
+  max-width: 28rem;
+  padding: 8px 10px 8px;
+  border: 1px solid #d0d1d2;
+  background: #fffefb;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #171a20;
+}
+.cash-feel-head {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  margin: 0 0 6px;
+}
+.cash-feel-head label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #5c5e62;
+}
+.cash-feel-head input,
+.cash-feel-head select {
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 0;
+  border-bottom: 1px solid #171a20;
+  background: transparent;
+  color: #171a20;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.cash-feel-head input { width: 8.5rem; }
+.cash-feel-tag {
+  margin: 0 0 6px;
+  font-family: var(--font-data);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.cash-feel-ranks {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+.cash-feel-ranks li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cash-feel-ranks span { color: #5c5e62; }
+.cash-feel-ranks strong {
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cash-feel-hot,
+.cash-feel-line,
+.cash-feel-note,
+.cash-feel-wait {
+  margin: 0 0 4px;
+}
+.cash-feel-note {
+  color: #5c5e62;
+  font-size: 11px;
 }
 
 .status-mark {
@@ -1171,6 +1279,13 @@ body,
   white-space: nowrap;
 }
 
+.mx-hint-full {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #393c41;
+}
+
 .mx-num {
   font-family: var(--font-data);
   font-size: 13px;
@@ -1237,6 +1352,9 @@ body,
 }
 
 @media (max-width: 960px) {
+  .weekly-mast {
+    grid-template-columns: 1fr;
+  }
   .week-stage {
     grid-template-columns: 1fr;
   }
@@ -1776,7 +1894,7 @@ body,
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 372px) minmax(0, 1fr) minmax(220px, 320px);
+  grid-template-columns: minmax(200px, 240px) minmax(420px, 1fr) minmax(200px, 260px);
   gap: 12px;
 }
 
@@ -1786,10 +1904,76 @@ body,
   flex-direction: column;
 }
 
-.diag-col h2 {
+.diag-col h2,
+.diag-pane h2,
+.diag-plot-note,
+.diag-book {
+  flex-shrink: 0;
+}
+
+.diag-col h2,
+.diag-pane h2 {
   margin: 0 0 4px;
   font-size: 13px;
   font-weight: 500;
+}
+
+.diag-plot-note {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #393c41;
+}
+
+.diag-series {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diag-book {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.diag-heat-col {
+  min-height: 0;
+}
+
+.diag-heat-frame {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 360px;
+}
+
+.diag-heat-key {
+  flex: none;
+  margin-top: 8px;
+  padding: 6px 0 0;
+  border-top: 1px solid #d0d1d2;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #393c41;
+}
+
+.diag-heat-key p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.diag-heat-key i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+}
+
+.diag-heat-key-note {
+  display: block;
+  margin-top: 4px;
 }
 
 .diag-histories {
@@ -1840,6 +2024,19 @@ body,
 
   .diagnostics-view .diag-chart {
     min-height: 180px;
+  }
+
+  .diag-histories {
+    grid-template-rows: none;
+  }
+
+  .diag-pane {
+    min-height: 240px;
+  }
+
+  .diag-heat-frame,
+  .diagnostics-view .diag-heat-frame .diag-chart {
+    min-height: 520px;
   }
 }
 
