@@ -59,7 +59,8 @@ describe("diagLines", () => {
     expect(lines[3]).toMatch(/Boom is 20 percent and bust is 40 percent/);
     expect(lines[3]).toMatch(/recorded state stays normal/);
     expect(lines[4]).toMatch(/each adds 0/);
-    expect(lines.join(" ")).not.toMatch(/\u2014|Grinold|Noguer|Sharpe/);
+    expect(lines).toHaveLength(5);
+    expect(lines.join(" ")).not.toMatch(/\u2014|Grinold|Noguer|Sharpe|shown to be a discovery/);
   });
 
   it("says boom and bust matched when the percents do not move", () => {
