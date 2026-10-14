@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bubble Compass</title>
+    <title>As-Of Desk</title>
     <style>
       * {
         box-sizing: border-box;
@@ -14,15 +14,21 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #0a0a12;
-        font-family: system-ui, sans-serif;
+        background: #3a342c;
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
       }
       #game {
-        image-rendering: pixelated;
-        image-rendering: crisp-edges;
+        width: min(100%, 960px);
+        aspect-ratio: 960 / 540;
+        height: auto;
+        max-height: 100%;
+        outline: none;
+      }
+      #game canvas {
+        outline: none;
       }
     </style>
-    <script type="module" crossorigin src="/fioracle/compass/desk/assets/index-CT4t25Rn.js"></script>
+    <script type="module" crossorigin src="/fioracle/compass/desk/assets/index-EmS6jZP7.js"></script>
   </head>
   <body>
     <div id="game"></div>

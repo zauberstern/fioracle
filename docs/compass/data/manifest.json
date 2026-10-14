@@ -1,110 +1,328 @@
 {
   "source": "history_parquet",
-  "n_assets": 8,
+  "n_assets": 23,
   "assets": [
     {
       "asset": "SP500_TOTAL_RETURN",
       "path": "docs/compass/data/history/SP500_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "BBG_US_HIGH_YIELD_TOTAL_RETURN",
       "path": "docs/compass/data/history/BBG_US_HIGH_YIELD_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "BBG_US_CORPORATE_TOTAL_RETURN",
       "path": "docs/compass/data/history/BBG_US_CORPORATE_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "BBG_US_TREASURY_TOTAL_RETURN",
       "path": "docs/compass/data/history/BBG_US_TREASURY_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "GOLD_TOTAL_RETURN",
       "path": "docs/compass/data/history/GOLD_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "US_CASH_RETURN",
       "path": "docs/compass/data/history/US_CASH_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "CDX_HY_5Y_TOTAL_RETURN",
       "path": "docs/compass/data/history/CDX_HY_5Y_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
     },
     {
       "asset": "CDX_IG_5Y_TOTAL_RETURN",
       "path": "docs/compass/data/history/CDX_IG_5Y_TOTAL_RETURN.json",
       "layers": [
         "bsadf",
+        "credit_trajectory",
         "dlinear",
         "lppls",
         "macro_debt",
         "regime",
         "sentiment"
       ],
-      "n_rows": 980
+      "n_rows": 234
+    },
+    {
+      "asset": "BBG_GLOBAL_AGG_TOTAL_RETURN",
+      "path": "docs/compass/data/history/BBG_GLOBAL_AGG_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "BBG_EURO_AGG_CHF_HEDGED_TOTAL_RETURN",
+      "path": "docs/compass/data/history/BBG_EURO_AGG_CHF_HEDGED_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "US_BOND_AGG_TOTAL_RETURN",
+      "path": "docs/compass/data/history/US_BOND_AGG_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "US_TIPS_0_5_TOTAL_RETURN",
+      "path": "docs/compass/data/history/US_TIPS_0_5_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "GLOBAL_ILB_0_5_TOTAL_RETURN",
+      "path": "docs/compass/data/history/GLOBAL_ILB_0_5_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "ISHARES_20Y_TREASURY_TOTAL_RETURN",
+      "path": "docs/compass/data/history/ISHARES_20Y_TREASURY_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "ISHARES_7_10Y_TREASURY_TOTAL_RETURN",
+      "path": "docs/compass/data/history/ISHARES_7_10Y_TREASURY_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "ISHARES_1_3Y_TREASURY_TOTAL_RETURN",
+      "path": "docs/compass/data/history/ISHARES_1_3Y_TREASURY_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "ISHARES_SWISS_GOV_7_15_TOTAL_RETURN",
+      "path": "docs/compass/data/history/ISHARES_SWISS_GOV_7_15_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "WTI_TOTAL_RETURN",
+      "path": "docs/compass/data/history/WTI_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "VRP_HARVEST_TOTAL_RETURN",
+      "path": "docs/compass/data/history/VRP_HARVEST_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "CHF_TOTAL_RETURN",
+      "path": "docs/compass/data/history/CHF_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "US_AAA_CORP_BOND_TOTAL_RETURN",
+      "path": "docs/compass/data/history/US_AAA_CORP_BOND_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "US_BAA_CORP_BOND_TOTAL_RETURN",
+      "path": "docs/compass/data/history/US_BAA_CORP_BOND_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
+    },
+    {
+      "asset": "IBOXX_UK_IL_GILT_TOTAL_RETURN",
+      "path": "docs/compass/data/history/IBOXX_UK_IL_GILT_TOTAL_RETURN.json",
+      "layers": [
+        "bsadf",
+        "credit_trajectory",
+        "dlinear",
+        "lppls",
+        "macro_debt",
+        "regime",
+        "sentiment"
+      ],
+      "n_rows": 234
     }
   ]
 }
