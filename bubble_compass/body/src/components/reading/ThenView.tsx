@@ -46,6 +46,11 @@ export function ThenView({ onBack }: Props) {
   const book = BOOKS.find((b) => b.id === currentAsset) ?? {
     id: currentAsset,
     name: bookName(currentAsset),
+    short: bookName(currentAsset),
+    plain: bookName(currentAsset),
+    mark: "",
+    group: "",
+    hint: "",
   };
 
   useEffect(() => {
@@ -240,7 +245,7 @@ export function ThenView({ onBack }: Props) {
         <select value={book.id} onChange={(e) => chooseBook(e.target.value)}>
           {BOOKS.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.name}
+              {item.mark} {item.plain}
             </option>
           ))}
         </select>
@@ -268,11 +273,8 @@ export function ThenView({ onBack }: Props) {
               <p key={line}>{line}</p>
             ))}
             {reading.move ? <p>{reading.move}</p> : null}
-            {reading.dailyReturn === 0 && current >= "2026-01-01" ? (
-              <p>
-                Late 2026 rows repeat the last real print. A zero return there
-                is a placeholder.
-              </p>
+            {reading.dailyReturn === 0 && current === "2026-01-12" ? (
+              <p>On this row the return is 0.</p>
             ) : null}
           </details>
           <button type="button" className="then-open-week" onClick={onBack}>

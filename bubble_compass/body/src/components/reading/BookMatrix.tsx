@@ -5,6 +5,10 @@ import type { HeatParts } from "../../narrator/heat";
 export type MatrixBook = {
   key: string;
   name: string;
+  short?: string;
+  plain?: string;
+  mark?: string;
+  hint?: string;
   heat: number;
   word: "Quiet" | "Warming" | "Stretched";
   lines: string[];
@@ -93,7 +97,8 @@ export function BookMatrix({ books, date, activeId, onActive, onPick }: Props) {
               data-book={book.key}
               tabIndex={on || (activeId == null && index === 0) ? 0 : -1}
               className={on ? `mx-cell mx-${book.word} mx-on` : `mx-cell mx-${book.word}`}
-              aria-label={`${book.name}, ${book.word}, ${book.heat.toFixed(1)}`}
+              title={book.hint || book.name}
+              aria-label={`${book.plain || book.name}, ${book.word}, ${book.heat.toFixed(1)}. ${book.hint || ""}`}
               onMouseEnter={() => onActive(book.key)}
               onFocus={() => onActive(book.key)}
               onClick={() => onPick(book.key)}
@@ -113,7 +118,10 @@ export function BookMatrix({ books, date, activeId, onActive, onPick }: Props) {
                 }
               }}
             >
-              <span className="mx-name">{book.name}</span>
+              <span className="mx-name">
+                {book.mark ? `${book.mark} ` : ""}
+                {book.plain || book.short || book.name}
+              </span>
               <span className="mx-num">{book.cash ? "0.0" : book.heat.toFixed(1)}</span>
             </button>
           );
@@ -122,9 +130,10 @@ export function BookMatrix({ books, date, activeId, onActive, onPick }: Props) {
       {active ? (
         <div className="mx-panel" id="book-cell-detail">
           <p className="mx-panel-title">
-            {active.name} on {date ? plainDate(date) : "this date"} is {active.word}{" "}
+            {active.plain || active.name} on {date ? plainDate(date) : "this date"} is {active.word}{" "}
             at {active.cash ? "0.0" : active.heat.toFixed(1)}.
           </p>
+          {active.hint ? <p className="mx-hint-full">{active.hint}</p> : null}
           {active.move ? <p>{active.move}</p> : null}
           <p>{leadPiece(active.parts)}</p>
           <details className="mx-why">

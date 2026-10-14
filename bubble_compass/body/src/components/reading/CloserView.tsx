@@ -42,7 +42,7 @@ export function CloserView() {
         >
           {BOOKS.map((book) => (
             <option key={book.id} value={book.id}>
-              {book.name}
+              {book.mark} {book.plain}
             </option>
           ))}
         </select>
