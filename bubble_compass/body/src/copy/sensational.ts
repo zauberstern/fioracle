@@ -1,7 +1,7 @@
 import { glossary, heatBandLabel, regimeKey } from "./glossary";
 
 export function crisisHeadline(asset: string, score: number): string {
-  return `${asset}: OVERHEAT ${score.toFixed(0)} - markets this stretched rarely end quietly`;
+  return `${asset} heat ${score.toFixed(0)}. The reading is stretched.`;
 }
 
 export function storyLead(
@@ -12,12 +12,12 @@ export function storyLead(
 ): string {
   const heat = glossary[heatBandLabel(score)].label;
   const state = glossary[regimeKey(regime)].label;
-  return `On ${asOf}, ${asset} read ${heat} at ${score.toFixed(1)}. Market state: ${state}.`;
+  return `On ${asOf}, ${asset} read ${heat}, heat ${score.toFixed(1)}. Market state: ${state}.`;
 }
 
 export function stretchHeadline(bubbleFlag: boolean, stat: number, cv: number): string {
   if (bubbleFlag) {
-    return `Explosive Growth Detected (stat ${stat.toFixed(2)} > ${cv.toFixed(2)})`;
+    return `Past the crack line (stat ${stat.toFixed(2)} above ${cv.toFixed(2)})`;
   }
-  return `Stretch quiet for now (stat ${stat.toFixed(2)} vs ${cv.toFixed(2)})`;
+  return `Under the crack line (stat ${stat.toFixed(2)} vs ${cv.toFixed(2)})`;
 }

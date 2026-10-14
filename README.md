@@ -8,12 +8,6 @@
   <strong>Regime-Aware Fixed Income Oracle</strong>
 </p>
 
-<p align="center">
-  <sub>
-    <em>Kartik Yadav · Leon Förch · Edward Kachatryan · Nicola Copetti · Alessandro Florentino</em>
-  </sub>
-</p>
-
 <br/>
 
 <p align="center">
@@ -30,9 +24,89 @@
 
 ---
 
+## Meridian
+
+Meridian reads 23 public books on a date you choose. It keeps the latest row dated on or before that date. Heat runs from 0 to 100. Under 40 the book is Quiet. From 40 it is Warming. From 70 it is Stretched. Cash stays at 0.
+
+On this history the number is the distance above the path the book had been following, plus a fast-rise check. The path adds 12 points per step and stops at 40. The fast-rise check is the Phillips, Shi and Yu (2015) screen. When the check is on, it starts at 25 and adds 8 points for each unit past 1.49. When the check is off, it is 5 points times the reading. A break date can add up to 30 points, and news tone can add up to 15. Both are missing here, so each adds 0. The sum stops at 100.
+
+The published history has 234 rows, from 1 Jan 2008 through 2 Oct 2026. Five dates are marked.
+
+On 1 Jan 2008, Stocks is Quiet at 2.3. On 22 Aug 2008, the row the Lehman week lands on, Stocks is Quiet at 4.4. The same row puts the US inflation-linked book at 100, because its fast-rise reading is far above 1.49 and the score stops at 100. That book is a total return. Consumer prices are not in this history. The other marked rows are 26 Feb 2020, 3 Jan 2022, and 17 Feb 2023. Open them on the page and read the books as of that row.
+
+The reading is published at [zauberstern.github.io/fioracle/compass](https://zauberstern.github.io/fioracle/compass/). Stillmoor is the same history played as a desk, at [zauberstern.github.io/fioracle/compass/desk](https://zauberstern.github.io/fioracle/compass/desk/).
+
+The pages are static files under `docs/compass/`. They do not use Supabase. If you add a database later, put the project URL and the anon key in a gitignored `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, and store the same names as GitHub Actions secrets. Do not give the service role key a `VITE_` name, and do not commit it.
+
+These figures describe the public marks for the date you pin. They are not a forecast or a recommendation.
+
+## Disclaimer
+
+**Research software. Not investment advice. Backtests are hypothetical performance.**
+See `paper/compliance/HYPOTHETICAL_PERFORMANCE.md`. Do not post ERoD/Sharpe tables as mass-market performance.
+
+## Public site
+
+GitHub Pages (folder `/docs` on `main`): research documentation and manifesto.
+Not a performance advertisement. Gate status on the site is `cleared: false`.
+
+Renewable-gas research cockpit: [`docs/molecule/`](docs/molecule/) (Track G) — pinned GSAP acts, Three.js tubes/particles/shaders, orb guide, mute-default Howler, Simple Mode.
+Timeline JSON is fail-closed (`certificates: unpriced`, `cleared: false` until gates pass).
+
+Replace `contactEmail` in `docs/site-config.js` before treating the briefing CTA as real.
+Formspree stays `PLACEHOLDER` until a real form id is configured. Analytics default off.
+
+## Renewable gas engine (research)
+
+Dual-track extension on the same PIT lake / SPA culture — **not** a rewrite of the FI spine.
+
+| Piece | Path |
+|---|---|
+| Paper lock (DII/IG) | `authority_corpus/papers/LOCK.json`, `src/core/dii.py`, `src/core/dii_causal.py` |
+| Energy dataset | `config/config.energy_v1.yaml` → `fioracle_energy_v1` |
+| Promote TTF/EUA | `scripts/promote_energy_drop_to_landing.py` |
+| AGSI / ALSI / NAO | `scripts/fetch_agsi_storage.py`, `scripts/fetch_gie_physical.py`, `scripts/fetch_nao.py` |
+| Engine WF | `scripts/run_rg_engine.py` |
+| Storage RL (PPO/SAC/DQN) | `scripts/train_storage_agents.py` |
+| Timeline → Pages | `scripts/export_rg_timeline.py` → `docs/molecule/` |
+| Experiment class | `fioracle_rg_engine_v1` (SPA vs baseline panel; certificates unpriced) |
+
+```bash
+# Promote energy parquet → landings + ingest (separate from fioracle_ds_v3)
+.venv/bin/python scripts/promote_energy_drop_to_landing.py
+# Live AGSI/ALSI (needs GIE_AGSI_API_KEY in .env); use --fixture-fallback only for CI/offline
+.venv/bin/python scripts/fetch_agsi_storage.py --start 2011-01-01
+.venv/bin/python scripts/fetch_gie_physical.py --start 2012-01-01
+.venv/bin/python scripts/fetch_nao.py
+.venv/bin/python scripts/ingest_to_lake.py --config config/config.yaml \
+  --override config/config.energy_v1.yaml --build-dataset fioracle_energy_v1
+
+# Multi-algo storage + outer walk-forward + timeline cockpit
+.venv/bin/python scripts/train_storage_agents.py --algos ppo,sac,dqn --timesteps 40000
+.venv/bin/python scripts/run_rg_engine.py
+.venv/bin/python scripts/export_rg_timeline.py
+```
+
+FI convexity overlay keeps `features.dii.enabled: false` and `vrp_overlay.enabled: false`.
+Do not claim SPA alpha on the FI book from this track.
+
+## Why FIOracle vs Qlib / backtrader / vectorbt / mlfinlab
+
+FIOracle is **not** a general-purpose backtester. The wedge is:
+
+- Point-in-time lake + `available_date` lag contract
+- Jump Model + XGBoost FI Regime Radar with embargoed training
+- Publication-grade SPA / PBO / trial ledger discipline
+
+Honest limitation: under the paper freeze, FI allocation SPA vs Agg / 60-40 is a published **null**. Convexity work (ERoD, conformal cash floor, optional VRP) lives in `config/config.convexity.yaml` and does not retune freeze gamma to fish Sharpe.
+
 ## Overview
 
-FIOracle is a quantitative research framework that combines unsupervised regime detection with supervised regime forecasting to dynamically allocate across a universe of fixed income and safe-haven assets. The system employs a three-layer architecture:
+FIOracle is a point-in-time Jump Model plus XGBoost regime system for fixed income
+**and** a crisis-convexity research overlay with pre-registered gates -- **but** the
+published FI allocation SPA versus Agg / 60-40 is a null, and public pages must not show
+hypothetical ERoD/Sharpe -- **therefore** the product thesis is drawdown control and
+Radar auditability, not alpha marketing.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -51,26 +125,16 @@ FIOracle is a quantitative research framework that combines unsupervised regime 
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Asset Universe
+### Asset Universe (paper freeze)
 
-| Category | Assets |
-|----------|--------|
-| **Cash & T-Bills** | US T-Bills |
-| **Government Bonds** | US 10Y Treasury, Treasury Index, Sovereign Index |
-| **Investment Grade** | US Aggregate Bond, Corporate IG |
-| **High Yield** | CDX HY 5Y, USD Liquid HY |
-| **Inflation Protection** | US TIPS 0-5Y, Inflation Swaps (1Y, 2Y, 5Y, 10Y) |
-| **Safe Havens** | Gold, Swiss Franc (CHF) |
-| **Commodities** | WTI Crude Oil |
+**18 investable** series (see `config/config.yaml` / `paper/PAPER_EXPERIMENT.md`): cash, US Treasuries (cash–long), US/Global agg & credit, EM USD agg, TIPS & 5Y inflation swap, Global ILB 0–5, CHF, USD swaption 1Y5Y, Swiss gov 7–15.
 
-### Macro Indicators
+**23 excluded** series (loaded for research context only; not optimized into): Gold, WTI, additional IBOXX/CDX/inflation-swap tenors, etc. Crisis “hedge” names that remain excluded are not live hedges.
 
-- **VIX** (Market Volatility)
-- **GPRI** (Geopolitical Risk Index)
-- **US Inflation Rate** (CPI)
-- **US Debt-to-GDP Ratio**
-- **US High Yield OAS** (Credit Spreads)
-- **Economic Policy Uncertainty** (EPU)
+### Macro Indicators (enabled)
+
+- **VIX**, **GPRI**, **US Inflation Rate**, **US High Yield OAS**, **US Unemployment Rate**
+- Disabled at load: Debt-to-GDP, EPU, GDP growth, M2 velocity
 
 ---
 
@@ -91,17 +155,15 @@ The regularization parameter λ controls regime persistence vs. responsiveness, 
 A gradient-boosted classifier predicts tomorrow's regime using today's features:
 
 **Defenses Against Overfitting:**
-- `max_depth=5` limits tree complexity
-- `subsample=0.8` and `colsample_bytree=0.8` introduce randomness
-- `early_stopping_rounds` prevents excessive iterations
-- Stratified time-series cross-validation (5-fold)
-- Hyperparameter grid search on validation set only
+- `max_depth=3`, `subsample=0.7`, `colsample_bytree=0.7`
+- `early_stopping_rounds` and time-series CV (`cv_folds=3`)
+- Hyperparameter tuning on validation / walk-forward windows only
 
 **Defenses Against Look-Ahead Bias:**
-- **Strict temporal separation**: Training (1945-2004), Validation (2005-2007), Test (2008-2025)
-- **Publication lag modeling**: All macro indicators are lagged by their real-world reporting delays (e.g., CPI: 15 days, GDP: 90 days, VIX: 1 day)
-- **Walk-forward architecture**: Models trained only on data available at each decision point
-- **No future information leakage**: Features computed with causal-only operations (e.g., trailing rolling windows, not centered)
+- **Strict temporal separation**: Train 1965–1994, Validation 1995–2007, Test 2008–2025-11-28
+- **Publication lag modeling**: macros lagged by reporting delays (e.g. CPI 15d, VIX 1d); store path applies lag once via `available_date`
+- **Walk-forward architecture**: JM rolling 10y train / 2y val / 6mo update
+- **Causal features only**: trailing windows; no centered ops
 
 **Historical Regime Detection**
 
@@ -130,9 +192,9 @@ Three strategies execute regime-conditioned allocations:
 | **EW** | Equal-weight bullish assets | Aggressive |
 
 **Regime-Specific Behavior:**
-- **Crisis detected**: Rotate to cash, Treasuries, Gold, CHF
-- **Inflationary**: Favor TIPS, commodities, reduce duration
-- **Calm**: Full diversification across credit, rates, alternatives
+- **Crisis**: Rotate toward cash / Treasuries / CHF (investable hedges only)
+- **Inflationary**: Favor TIPS / inflation swaps; shorten duration
+- **Calm**: Diversify across credit, rates, and alternatives in the investable set
 
 ---
 
@@ -140,49 +202,35 @@ Three strategies execute regime-conditioned allocations:
 
 ### Out-of-Sample Performance (2008–2025)
 
-The test period spans 17+ years and includes multiple stress events: Global Financial Crisis (2008), European Debt Crisis (2011), COVID Crash (2020), and the 2022 Rate Shock.
+Regenerated under paper freeze `dataset_id=fioracle_ds_v1` with **walk-forward** (`regimes.rolling.enabled: true`) and store PIT backend. Source: `paper/tables/headline_oos.csv`.
 
-| Metric | EW | MVO |
-|--------|----|----|
-| **Sharpe Ratio** | 0.39 | 0.37 |
-| **Total Return** | 54.8% | 53.1% |
-| **Calmar Ratio** | 0.21 | 0.31 |
+| Metric | MinVar | MVO | EW |
+|--------|--------|-----|-----|
+| **Sharpe Ratio** | −0.20 | 0.02 | −0.05 |
+| **Total Return** | −4.7% | −1.8% | −2.7% |
+| **Max Drawdown** | −7.3% | −26.6% | −8.3% |
+
+Parent method paper (not FIOracle): [`paper.pdf`](paper.pdf) = Shu, Yu & Mulvey (2024).
 
 ### Cumulative Wealth Growth
-
-The regime-aware strategies successfully navigated multiple crisis periods while maintaining steady growth:
 
 ![Cumulative Returns](output/figures/test/ew/cumulative_returns.png)
 
 ### Drawdown Analysis
 
-Our strategies demonstrated strong downside protection during volatile periods:
-
 ![Drawdown](output/figures/test/ew/drawdown.png)
 
 ### Dynamic Allocation
 
-The model dynamically shifts allocation based on detected market regimes:
-
 ![Allocation Timeline](output/figures/test/ew/allocation_timeline.png)
 
 ### Rolling Sharpe Ratio
-
-Consistent risk-adjusted performance across market cycles:
 
 ![Rolling Sharpe](output/figures/test/ew/rolling_sharpe.png)
 
 ### Monthly Returns Heatmap
 
 ![Monthly Returns](output/figures/test/ew/monthly_heatmap.png)
-
-### Supply Shock Period Analysis (2018–2022)
-
-The model adapted allocations during the COVID crash and subsequent supply shock period:
-
-![Supply Shock Allocations](output/figures/test/supply_shock_analysis/combined_allocation_pies.png)
-
-![Supply Shock Timeline](output/figures/test/supply_shock_analysis/combined_allocation_timelines.png)
 
 ---
 
@@ -192,7 +240,7 @@ The model adapted allocations during the COVID crash and subsequent supply shock
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/fioracle.git
+git clone https://github.com/zauberstern/fioracle.git
 cd fioracle
 
 # Create virtual environment
@@ -263,38 +311,40 @@ All settings live in `config/config.yaml`. Key sections:
 2. Add `MY_ASSET` to `assets.investable` in config
 3. Run the pipeline
 
-### Key Parameters
+### Key Parameters (paper freeze)
 
 ```yaml
-# Date splits
 data:
-  train_end: 2004-12-31
+  train_start: 1965-01-01
+  train_end: 1994-12-31
   val_end: 2007-12-31
   test_start: 2008-01-01
+  backend: store             # after Phase 1 cutover
+  dataset_id: fioracle_ds_v1
 
-# Regime detection
 regimes:
   jump_model:
-    n_states: 3              # calm / inflationary / crisis
-    default_lambda: 5.0
+    n_states: 3
+    default_lambda: 2.0
   xgboost:
-    max_depth: 5
-    subsample: 0.8
+    max_depth: 3
+    subsample: 0.7
 
-# Portfolio
 portfolio:
-  gamma_risk: 10.0           # Higher = more conservative
-  max_weight: 0.40           # Max single-asset allocation
-  transaction_cost: 0.0005   # 5 bps
+  gamma_risk: 8.0
+  max_weight: 0.20
+  transaction_cost: 0.0005   # 5 bps flat; tiered off for main paper
+  robustness_grid:
+    enabled: false
 ```
 
 ### Quick Recipes
 
 | Goal | Changes |
 |------|--------|
-| **Conservative** | `gamma_risk: 15`, `max_weight: 0.25` |
-| **Aggressive** | `gamma_risk: 5`, `max_weight: 0.50` |
-| **Fast dev runs** | `train_start: 2000-01-01`, `tune_hyperparameters: false` |
+| **Conservative** | `gamma_risk: 12`, `max_weight: 0.15` |
+| **Aggressive** | `gamma_risk: 5`, `max_weight: 0.25` |
+| **Fast dev runs** | `python main.py --quick`, `tune_hyperparameters: false` |
 
 ---
 
@@ -316,15 +366,13 @@ If you use FIOracle in your research, please cite:
   title={FIOracle: Regime-Aware Fixed Income Portfolio Optimization},
   author={Yadav, Kartik and Förch, Leon and Kachatryan, Edward and Copetti, Nicola and Florentino, Alessandro},
   year={2025},
-  url={https://github.com/your-org/fioracle}
+  url={https://github.com/zauberstern/fioracle}
 }
 ```
 
-### Related Work
+### Related Work (parent paper)
 
-This project implements concepts from:
-
-> Shu, Y., Yu, C., & Mulvey, J. M. (2024). *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*. [arXiv:2406.09578](https://arxiv.org/abs/2406.09578)
+Shu, Yu & Mulvey (2024), *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*, Annals of Operations Research, [DOI 10.1007/s10479-024-06266-0](https://doi.org/10.1007/s10479-024-06266-0), [arXiv:2406.09578](https://arxiv.org/abs/2406.09578). Local `paper.pdf` is this parent paper only. See `paper/refs/shu_yu_mulvey_2024.bib`.
 
 ---
 

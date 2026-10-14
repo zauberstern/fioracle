@@ -21,7 +21,7 @@ export function TopBar() {
   return (
     <header className="top-bar">
       <div className="top-bar-left">
-        <span className="app-name">Bubble Compass</span>
+        <span className="app-name">Meridian</span>
         <span className="asset-name">{asset}</span>
       </div>
       <div className="top-bar-center">

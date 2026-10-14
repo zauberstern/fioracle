@@ -1,5 +1,5 @@
 /**
- * Sensational display terms; technical names live in `tech` for hover only.
+ * Public reading labels; technical names live in `tech` for Look closer hover.
  */
 
 export type GlossaryEntry = {
@@ -10,96 +10,96 @@ export type GlossaryEntry = {
 
 export const glossary = {
   bubbleScore: {
-    label: "Overheat Alert",
-    tech: "Bubble Score (0-100). Mixes DLinear residual z-score, PSY/BSADF stretch vs critical value, LPPLS confidence, and FinBERT sentiment velocity when available.",
+    label: "Heat",
+    tech: "Heat runs from 0 to 100. It uses upside residual stretch, the stretch test against its crack line, LPPLS confidence when that package exists, and headline tone when headlines exist.",
   },
   heatLow: {
-    label: "All Clear",
-    tech: "Heat below 40. Residual and bubble tests sit near quiet baselines.",
+    label: "Quiet",
+    tech: "Heat below 40. Residual stretch and the bubble tests sit near a quiet baseline.",
   },
   heatWarm: {
-    label: "Warming Up",
-    tech: "Heat 40-69. Price stretch or crash-timing confidence is rising.",
+    label: "Warming",
+    tech: "Heat from 40 to 69. Upside stretch, or crash-timing confidence, is rising.",
   },
   heatHot: {
-    label: "Overheat Alert",
-    tech: "Heat 70-100. Several layers agree the move looks explosive or late-stage.",
+    label: "Stretched",
+    tech: "Heat from 70 to 100. Several layers agree the upside move looks late. A large residual on its own is not treated as overheat.",
   },
   regime: {
     label: "Market state",
-    tech: "Regime from the RL classifier (heuristic fallback when no PPO model is loaded): normal, boom, or bust.",
+    tech: "The regime label is normal, boom, or bust. A heuristic fills in when no trained model is loaded.",
   },
   regimeNormal: {
-    label: "All Clear",
-    tech: "Regime = normal. Boom and bust probabilities stay low.",
+    label: "Quiet",
+    tech: "Regime is normal. Boom and bust probabilities stay low.",
   },
   regimeBoom: {
-    label: "FRENZY MODE",
-    tech: "Regime = boom. Stretch and hype features point to crowded upside.",
+    label: "Warming",
+    tech: "Regime is boom. Stretch features point at a crowded upside.",
   },
   regimeBust: {
-    label: "COLLAPSE WARNING",
-    tech: "Regime = bust. Crash-window and downside features dominate.",
+    label: "Stretched",
+    tech: "Regime is bust. Crash-window and downside features lead.",
   },
   stretchTest: {
-    label: "Explosive Growth Detected",
-    tech: "PSY BSADF (Phillips-Shi-Yu Backward Sup-ADF). Compares the explosive-growth statistic to a critical value under a random-walk null.",
+    label: "Running hot",
+    tech: "PSY BSADF compares the explosive-growth statistic with a critical value under a random-walk null.",
   },
   crashTiming: {
-    label: "Crash Window Opening",
-    tech: "LPPLS (Log-Periodic Power Law Singularity). Multi-window fit confidence and the estimated critical-time window (tc).",
+    label: "Timing",
+    tech: "LPPLS fit confidence and the estimated critical-time window. When the package is missing, the row says not estimated.",
   },
   newsTone: {
-    label: "Hype Meter",
-    tech: "FinBERT sentiment. Level is average headline polarity (-1 to +1). Rate is sentiment velocity. Marked unavailable when no headlines are wired.",
+    label: "Headlines",
+    tech: "FinBERT tone from headlines. This history marks the layer unavailable because no headlines are wired.",
   },
   heatHistory: {
-    label: "Overheat over time",
-    tech: "Historical Bubble Score series with threshold lines at 40 (warming) and 70 (hot).",
+    label: "Heat over time",
+    tech: "Heat through the history, with lines at 40 (warming) and 70 (stretched).",
   },
   scrubHistory: {
-    label: "Scrub history",
-    tech: "Point-in-time replay from expanding-window parquet. Charts and the as-of stamp follow the scrubber; live WebSocket updates pause while scrubbing.",
+    label: "Walk the record",
+    tech: "Replay from the saved history. Charts and the date stamp follow the scrubber.",
   },
   overview: {
-    label: "Overview",
-    tech: "Primary quant view: overheat alert, market state, and evidence charts on the history tape.",
+    label: "This week",
+    tech: "The weekly page: Quiet, Warming, or Stretched, plus Heat on the public marks.",
   },
   world: {
     label: "World",
-    tech: "Experimental 3D marketscape behind VITE_ENABLE_WORLD_3D. Terrain maps the same layer outputs.",
+    tech: "An experimental 3D view behind VITE_ENABLE_WORLD_3D. It is off the public nav.",
   },
   game: {
-    label: "Game",
-    tech: "As-Of Desk: play the same history tape. One real session per turn; no synthetic event generator.",
+    label: "Stillmoor",
+    tech: "An optional town on the same history. Each stamp is one real session. There is no synthetic event generator.",
   },
   live: {
-    label: "Live",
-    tech: "WebSocket connected. Dashboard fields update from the brain feed.",
+    label: "Saved history",
+    tech: "The history comes from saved files or the API. With no socket, the page does not say Live.",
   },
   offline: {
-    label: "Offline",
-    tech: "No live WebSocket. Showing cached history or fixture state.",
+    label: "Empty history",
+    tech: "No history is loaded.",
   },
   scrubbing: {
-    label: "Scrubbing",
-    tech: "Replay mode. The scrubber owns the as-of date; live deltas are ignored.",
+    label: "Walk the record",
+    tech: "Replay is on. The scrubber owns the date, and live deltas are ignored.",
   },
   asOf: {
-    label: "As of",
-    tech: "Decision timestamp in America/New_York, with UTC clock beside it.",
+    label: "Dated",
+    tech: "The snapped as-of date on the history, at UTC midnight.",
   },
   evidence: {
     label: "Checks",
-    tech: "One-line readouts from Layers 2-4 (BSADF, LPPLS, FinBERT).",
+    tech: "Short readouts from the stretch test, crash timing, and headline tone.",
   },
   crisisAlert: {
-    label: "Crisis alert",
-    tech: "Full-width banner when Overheat Alert exceeds 70 on the selected as-of date.",
+    label: "Stretched",
+    tech: "Shown when Heat is 70 or higher on the date you have pinned.",
   },
   story: {
-    label: "Story",
-    tech: "Narrative of the selected as-of: what Heat, stretch, and crash-window already showed that morning.",
+    label: "The morning's read",
+    tech: "What Heat, stretch, and the crash window already showed on that morning.",
   },
 } as const satisfies Record<string, GlossaryEntry>;
 

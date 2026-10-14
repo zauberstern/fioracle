@@ -1,28 +1,37 @@
-import type { KAPLAYCtx } from "kaplay";
+import { plainDate } from "../../../shared/plainDate";
 import type { DeskHud } from "../systems/TapePlayer";
 
+/** Chat consumes one tape line; no scrolling bar on the HUD. */
 export class MarketTicker {
   private scroll = 0;
+  private paused = false;
 
-  tick(dt: number): void {
-    this.scroll += dt * 24;
-    if (this.scroll > 400) this.scroll = 0;
+  setPaused(p: boolean): void {
+    this.paused = p;
   }
 
-  draw(k: KAPLAYCtx, asOf: string, hud: DeskHud, source: string): void {
-    const sent = Number.isFinite(hud.sentiment) ? hud.sentiment.toFixed(2) : "n/a";
-    const line = `AS OF ${asOf} | HEAT ${hud.heat.toFixed(2)} | STRETCH ${hud.stretch.toFixed(2)} | CRASH ${hud.crashWindow} | SENT ${sent} | ${hud.regime} | ${source}`;
-    k.drawRect({
-      pos: k.vec2(0, 0),
-      width: k.width(),
-      height: 14,
-      color: k.rgb(12, 16, 28),
-    });
-    k.drawText({
-      text: line,
-      pos: k.vec2(4 - this.scroll, 3),
-      size: 8,
-      color: k.rgb(120, 200, 255),
-    });
+  togglePaused(): void {
+    this.paused = !this.paused;
+  }
+
+  tick(dt: number): void {
+    if (this.paused) return;
+    this.scroll += dt * 48;
+    if (this.scroll > 600) this.scroll = 0;
+  }
+
+  line(asOf: string, hud: DeskHud, source: string): string {
+    const sent = Number.isFinite(hud.sentiment)
+      ? hud.sentiment.toFixed(2)
+      : "n/a";
+    const oas = Number.isFinite(hud.spreadBps)
+      ? `${hud.spreadBps.toFixed(0)}bps`
+      : "n/a";
+    return `${plainDate(asOf)}  heat ${hud.heat.toFixed(0)}  stretch ${hud.stretch.toFixed(2)}  regime ${hud.regime}  sent ${sent}  OAS ${oas}  history ${source}`;
+  }
+
+  /** @deprecated Prefer chat.line; kept for any residual callers. */
+  draw(): void {
+    /* no bar */
   }
 }

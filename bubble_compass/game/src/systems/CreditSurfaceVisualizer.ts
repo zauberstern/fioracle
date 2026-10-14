@@ -1,71 +1,59 @@
 import type { KAPLAYCtx } from "kaplay";
+import { TYPE } from "../ui/type";
 
-export interface CreditSurfaceSample {
-  spreadBps: number;
-  ltv: number;
-}
+/** OAS sparkline only - never invent LTV. */
 
-export interface CreditSurfaceDrawOpts {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  samples: CreditSurfaceSample[];
-}
-
-/** Spread-vs-LTV terrain; steepening slope signals instability. */
 export class CreditSurfaceVisualizer {
-  instability(samples: CreditSurfaceSample[]): number {
-    if (samples.length < 2) return 0;
-    let maxSlope = 0;
-    for (let i = 1; i < samples.length; i++) {
-      const a = samples[i - 1];
-      const b = samples[i];
-      const dSpread = b.spreadBps - a.spreadBps;
-      const dLtv = b.ltv - a.ltv;
-      if (Math.abs(dLtv) < 1e-6) continue;
-      const slope = dSpread / (dLtv * 1000);
-      maxSlope = Math.max(maxSlope, Math.abs(slope));
+  draw(
+    k: KAPLAYCtx,
+    opts: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      oasHistory: number[];
     }
-    return Math.min(1, maxSlope);
-  }
-
-  draw(k: KAPLAYCtx, opts: CreditSurfaceDrawOpts): void {
-    const { x, y, width, height, samples } = opts;
-    if (samples.length === 0) return;
-
-    const maxSpread = Math.max(...samples.map((s) => s.spreadBps), 100);
-    const instab = this.instability(samples);
-
+  ): void {
+    const { x, y, width, height, oasHistory } = opts;
     k.drawRect({
       pos: k.vec2(x, y),
       width,
       height,
-      color: k.rgb(20, 24, 36),
+      color: k.rgb(20, 20, 31),
+      outline: { width: 1, color: k.rgb(42, 42, 58) },
     });
-
-    const pts: { px: number; py: number }[] = [];
-    for (let i = 0; i < samples.length; i++) {
-      const s = samples[i];
-      const px = x + (s.ltv * width);
-      const py = y + height - (s.spreadBps / maxSpread) * (height - 4);
-      pts.push({ px, py });
+    if (oasHistory.length < 3) {
+      k.drawText({
+        text: "surface unavailable (no LTV; OAS history < 3)",
+        pos: k.vec2(x + 6, y + height / 2 - 4),
+        font: TYPE.hud.font,
+        size: TYPE.hud.size,
+        color: k.rgb(138, 138, 154),
+      });
+      return;
     }
-
-    for (let i = 1; i < pts.length; i++) {
+    const min = Math.min(...oasHistory);
+    const max = Math.max(...oasHistory);
+    const span = Math.max(max - min, 1e-6);
+    const step = (width - 12) / (oasHistory.length - 1);
+    for (let i = 1; i < oasHistory.length; i++) {
+      const x0 = x + 6 + (i - 1) * step;
+      const x1 = x + 6 + i * step;
+      const y0 = y + height - 6 - ((oasHistory[i - 1]! - min) / span) * (height - 12);
+      const y1 = y + height - 6 - ((oasHistory[i]! - min) / span) * (height - 12);
       k.drawLine({
-        p1: k.vec2(pts[i - 1].px, pts[i - 1].py),
-        p2: k.vec2(pts[i].px, pts[i].py),
+        p1: k.vec2(x0, y0),
+        p2: k.vec2(x1, y1),
         width: 2,
-        color: k.rgb(180, 100 + instab * 120, 80),
+        color: k.rgb(230, 159, 0),
       });
     }
-
     k.drawText({
-      text: `surface ${(instab * 100).toFixed(0)}% steep`,
-      pos: k.vec2(x + 2, y + 2),
-      size: 8,
-      color: k.rgb(160, 170, 190),
+      text: `HY OAS ${oasHistory[oasHistory.length - 1]!.toFixed(0)} bps`,
+      pos: k.vec2(x + 6, y + 4),
+      font: TYPE.hud.font,
+      size: TYPE.hud.size,
+      color: k.rgb(232, 228, 217),
     });
   }
 }

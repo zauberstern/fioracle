@@ -8,14 +8,13 @@ import {
   useLightweightChart,
   safeRemoveSeries,
 } from "../../hooks/useLightweightChart";
-import { sliceByCutoff, useChartCutoff } from "../../hooks/useChartData";
+import { chartRows, useChartCutoff } from "../../hooks/useChartData";
 import { useMarketStore } from "../../store/marketStore";
 
-export function LPPLSChart() {
+export function LPPLSChart({ fullSpan = false }: { fullSpan?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chart = useLightweightChart(containerRef);
-  const priceRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const fittedRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const confRef = useRef<ISeriesApi<"Line"> | null>(null);
   const history = useMarketStore((s) => s.lpplsHistory);
   const cutoff = useChartCutoff();
   const asset = useMarketStore((s) => s.currentAsset);
@@ -24,42 +23,48 @@ export function LPPLSChart() {
   useEffect(() => {
     if (!chart) return;
 
-    const priceSeries = chart.addSeries(LineSeries, {
-      color: "#9AA4B2",
-      lineWidth: 1,
-      title: "Price",
-    });
-    const fittedSeries = chart.addSeries(LineSeries, {
-      color: "#D55E00",
+    const confSeries = chart.addSeries(LineSeries, {
+      color: "#0072B2",
       lineWidth: 2,
-      title: "Fit",
+      title: "Break date",
     });
-    priceRef.current = priceSeries;
-    fittedRef.current = fittedSeries;
+    confRef.current = confSeries;
 
     return () => {
-      priceRef.current = null;
-      fittedRef.current = null;
-      safeRemoveSeries(chart, fittedSeries);
-      safeRemoveSeries(chart, priceSeries);
+      confRef.current = null;
+      safeRemoveSeries(chart, confSeries);
     };
   }, [chart]);
 
   useEffect(() => {
-    if (!chart || !priceRef.current || !fittedRef.current) return;
-    const sliced = sliceByCutoff(history, cutoff);
-    priceRef.current.setData(
-      sliced.map((d) => ({ time: d.time as UTCTimestamp, value: d.price }))
-    );
-    fittedRef.current.setData(
-      sliced.map((d) => ({ time: d.time as UTCTimestamp, value: d.fitted }))
+    if (!chart || !confRef.current) return;
+    if (lppls.unavailable || history.length === 0) {
+      confRef.current.setData([]);
+      return;
+    }
+    const sliced = chartRows(history, cutoff, fullSpan);
+    confRef.current.setData(
+      sliced.map((d) => ({
+        time: d.time as UTCTimestamp,
+        value: d.confidence,
+      }))
     );
 
-    if (lppls.crashWindowStart) {
+    const tip = sliced[sliced.length - 1];
+    if (tip?.tcEstimate != null) {
+      confRef.current.createPriceLine({
+        price: tip.confidence,
+        color: "#5C5E62",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: `tc ${new Date(tip.tcEstimate * 1000).toISOString().slice(0, 10)}`,
+      });
+    } else if (lppls.crashWindowStart) {
       const t = Math.floor(lppls.crashWindowStart.getTime() / 1000);
-      fittedRef.current.createPriceLine({
-        price: sliced[sliced.length - 1]?.fitted ?? 0,
-        color: "#E69F00",
+      confRef.current.createPriceLine({
+        price: tip?.confidence ?? 0,
+        color: "#5C5E62",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -68,7 +73,15 @@ export function LPPLSChart() {
     }
 
     chart.timeScale().fitContent();
-  }, [chart, history, cutoff, lppls]);
+  }, [chart, history, cutoff, fullSpan, lppls]);
+
+  if (lppls.unavailable) {
+    return (
+      <div className="chart-container chart-empty" role="status">
+        A date for a break is not in this history, so this chart has no line.
+      </div>
+    );
+  }
 
   return <div ref={containerRef} className="chart-container" />;
 }

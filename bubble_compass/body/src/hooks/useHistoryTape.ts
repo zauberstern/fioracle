@@ -15,6 +15,7 @@ function historyJsonUrl(asset: string): string {
 export function useHistoryTape(asset: string) {
   const loadHistoryFromApi = useMarketStore((s) => s.loadHistoryFromApi);
   const applyAsOf = useMarketStore((s) => s.applyAsOf);
+  const clearHistories = useMarketStore((s) => s.clearHistories);
   const replayMode = useMarketStore((s) => s.replayMode);
   const replayTimestamp = useMarketStore((s) => s.replayTimestamp);
   const historyLoaded = useMarketStore((s) => s.historyLoaded);
@@ -23,21 +24,29 @@ export function useHistoryTape(asset: string) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const tryLoad = async (url: string): Promise<boolean> => {
+      const tryLoad = async (
+        url: string,
+        source: "api" | "static"
+      ): Promise<boolean> => {
         const res = await fetch(url);
         if (!res.ok) return false;
         const body = await res.json();
         const layers = body.layers ?? body;
         if (!layers || typeof layers !== "object") return false;
         if (!cancelled) {
-          loadHistoryFromApi(asset, layers);
+          loadHistoryFromApi(asset, layers, source);
           mounted.current = true;
         }
         return true;
       };
 
       try {
-        if (await tryLoad(`${API_URL}/api/v1/history/${encodeURIComponent(asset)}`)) {
+        if (
+          await tryLoad(
+            `${API_URL}/api/v1/history/${encodeURIComponent(asset)}`,
+            "api"
+          )
+        ) {
           return;
         }
       } catch {
@@ -45,21 +54,21 @@ export function useHistoryTape(asset: string) {
       }
 
       try {
-        if (await tryLoad(historyJsonUrl(asset))) {
+        if (await tryLoad(historyJsonUrl(asset), "static")) {
           return;
         }
       } catch {
-        /* fall through to fixture */
+        /* empty state */
       }
 
-      if (!cancelled && !useMarketStore.getState().historyLoaded) {
-        useMarketStore.getState().ensureFixtureHistories();
+      if (!cancelled) {
+        clearHistories();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [asset, loadHistoryFromApi]);
+  }, [asset, loadHistoryFromApi, clearHistories]);
 
   useEffect(() => {
     if (!historyLoaded || !replayMode || replayTimestamp == null) return;

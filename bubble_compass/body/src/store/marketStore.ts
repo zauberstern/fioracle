@@ -1,5 +1,15 @@
 import { create } from "zustand";
 import gsap from "gsap";
+import {
+  snapAsOfIso as sharedSnapAsOfIso,
+  rowDateKey,
+  type LayerRows,
+} from "../../../shared/snapAsOf";
+
+/** Re-export shared SoT (latest as_of <= pin). */
+export function snapAsOfIso(layers: LayerRows, dateIso: string): string | null {
+  return sharedSnapAsOfIso(layers, dateIso);
+}
 
 export interface DLinearState {
   trend: number;
@@ -17,6 +27,8 @@ export interface LPPLSState {
   lppConfidence: number;
   crashWindowStart: Date | null;
   crashWindowEnd: Date | null;
+  unavailable?: boolean;
+  tcEstimate?: Date | null;
 }
 
 export interface SentimentState {
@@ -53,14 +65,20 @@ export interface BSADFPoint {
 
 export interface LPPLSPoint {
   time: number;
-  price: number;
-  fitted: number;
+  confidence: number;
+  tcEstimate: number | null;
 }
 
 const defaultAssetState: AssetState = {
   dlinear: { trend: 100, residual: 0, residualZ: 0 },
   bsadf: { bsadfStat: 0, criticalValue: 2.0, bubbleFlag: false },
-  lppls: { lppConfidence: 0, crashWindowStart: null, crashWindowEnd: null },
+  lppls: {
+    lppConfidence: 0,
+    crashWindowStart: null,
+    crashWindowEnd: null,
+    unavailable: true,
+    tcEstimate: null,
+  },
   sentiment: { sentimentVelocity: 0, sentimentLevel: 0, unavailable: true },
   regime: {
     regimeState: "normal",
@@ -79,7 +97,10 @@ interface Interpolated {
   crowdMomentum: number;
 }
 
-/** Offline fixture only. Production must refuse this when history parquet exists. */
+/**
+ * Offline fixture only. Callers must refuse when API/static tape exists.
+ * Kept for unit tests; product path uses empty-state when no tape.
+ */
 export function seedHistories(days = 180) {
   const now = Math.floor(Date.now() / 1000);
   const day = 86400;
@@ -89,37 +110,35 @@ export function seedHistories(days = 180) {
   const sentimentHistory: TimeValuePoint[] = [];
 
   let score = 28;
-  let price = 100;
   for (let i = days; i >= 0; i--) {
     const time = now - i * day;
     const wave = Math.sin((days - i) / 18) * 12;
     const ramp = Math.max(0, (days - i - 90) / 4);
     score = Math.max(5, Math.min(95, 28 + wave + ramp));
-    price = price * (1 + (score - 40) / 8000);
-    const fitted = price * (1 + (score - 35) / 500);
     const cv = 2.0;
     const stat = 1.2 + score / 40;
-    const sentiment = Math.tanh((score - 50) / 25);
 
     scoreHistory.push({ time, value: Number(score.toFixed(1)) });
     bsadfHistory.push({ time, stat: Number(stat.toFixed(3)), cv });
     lpplsHistory.push({
       time,
-      price: Number(price.toFixed(2)),
-      fitted: Number(fitted.toFixed(2)),
+      confidence: Number((score / 100).toFixed(3)),
+      tcEstimate: null,
     });
-    sentimentHistory.push({ time, value: Number(sentiment.toFixed(3)) });
   }
 
   return { scoreHistory, bsadfHistory, lpplsHistory, sentimentHistory };
 }
 
 function bubbleScoreFromState(state: AssetState): number {
-  const residualBoost = Math.min(40, Math.abs(state.dlinear.residualZ) * 12);
+  // Signed residual stretch: positive residual_z adds heat; |z| alone is not overheat.
+  const residualBoost = Math.min(40, Math.max(0, state.dlinear.residualZ) * 12);
   const bsadfBoost = state.bsadf.bubbleFlag
     ? 25 + Math.max(0, state.bsadf.bsadfStat - state.bsadf.criticalValue) * 8
     : Math.max(0, state.bsadf.bsadfStat) * 5;
-  const lpplsBoost = state.lppls.lppConfidence * 30;
+  const lpplsBoost = state.lppls.unavailable
+    ? 0
+    : (Number.isFinite(state.lppls.lppConfidence) ? state.lppls.lppConfidence : 0) * 30;
   const sentimentBoost = state.sentiment.unavailable
     ? 0
     : Math.abs(state.sentiment.sentimentVelocity) * 15;
@@ -135,27 +154,7 @@ function toUnix(iso: string): number {
   return Math.floor(Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 1000);
 }
 
-type LayerRows = Record<string, Array<Record<string, unknown>>>;
-
-function rowDateKey(row: Record<string, unknown>): string {
-  return String(row.as_of ?? "").slice(0, 10);
-}
-
-/** Nearest as_of on the tape at or before target; else first tape date. */
-export function snapAsOfIso(layers: LayerRows, dateIso: string): string | null {
-  const rows = layers.dlinear ?? layers.bsadf ?? [];
-  if (!rows.length) return null;
-  const target = dateIso.slice(0, 10);
-  let best: string | null = null;
-  for (const row of rows) {
-    const d = rowDateKey(row);
-    if (!d) continue;
-    if (d <= target && (best === null || d > best)) best = d;
-  }
-  return best ?? rowDateKey(rows[0]);
-}
-
-function historiesFromLayers(layers: LayerRows) {
+function historiesFromLayers(layers: LayerRows, cash = false) {
   const dlinear = layers.dlinear ?? [];
   const bsadf = layers.bsadf ?? [];
   const lppls = layers.lppls ?? [];
@@ -190,12 +189,17 @@ function historiesFromLayers(layers: LayerRows) {
   for (const row of lppls) {
     const d = rowDateKey(row);
     const cur = byDate.get(d) ?? { ...defaultAssetState };
+    const tcRaw = row.tc_estimate ?? row.tcEstimate;
+    const startRaw = row.crash_window_start ?? row.crashWindowStart ?? tcRaw;
+    const endRaw = row.crash_window_end ?? row.crashWindowEnd ?? tcRaw;
     byDate.set(d, {
       ...cur,
       lppls: {
         lppConfidence: Number(row.lpp_confidence ?? row.lppConfidence ?? 0),
-        crashWindowStart: null,
-        crashWindowEnd: null,
+        crashWindowStart: startRaw ? new Date(String(startRaw)) : null,
+        crashWindowEnd: endRaw ? new Date(String(endRaw)) : null,
+        unavailable: Boolean(row.unavailable ?? false),
+        tcEstimate: tcRaw ? new Date(String(tcRaw)) : null,
       },
     });
   }
@@ -231,7 +235,7 @@ function historiesFromLayers(layers: LayerRows) {
   const dates = [...byDate.keys()].sort();
   const scoreHistory: TimeValuePoint[] = dates.map((d) => ({
     time: toUnix(d),
-    value: Number(bubbleScoreFromState(byDate.get(d)!).toFixed(1)),
+    value: cash ? 0 : Number(bubbleScoreFromState(byDate.get(d)!).toFixed(1)),
   }));
 
   const bsadfHistory: BSADFPoint[] = bsadf.map((row) => ({
@@ -240,16 +244,17 @@ function historiesFromLayers(layers: LayerRows) {
     cv: Number(row.critical_value ?? row.criticalValue ?? 1.49),
   }));
 
-  const lpplsHistory: LPPLSPoint[] = lppls.map((row, i) => {
-    const conf = Number(row.lpp_confidence ?? row.lppConfidence ?? 0);
-    const trend = Number(row.trend ?? dlinear[i]?.trend ?? 100 + i * 0.05);
-    const base = Number.isFinite(trend) ? trend : 100 + i * 0.05;
-    return {
-      time: toUnix(String(row.as_of)),
-      price: Number(base.toFixed(2)),
-      fitted: Number((base * (1 + conf * 0.05)).toFixed(2)),
-    };
-  });
+  const lpplsHistory: LPPLSPoint[] = lppls
+    .filter((row) => !row.unavailable)
+    .map((row) => {
+      const conf = Number(row.lpp_confidence ?? row.lppConfidence ?? 0);
+      const tcRaw = row.tc_estimate ?? row.tcEstimate;
+      return {
+        time: toUnix(String(row.as_of)),
+        confidence: Number.isFinite(conf) ? conf : 0,
+        tcEstimate: tcRaw ? toUnix(String(tcRaw)) : null,
+      };
+    });
 
   const sentimentHistory: TimeValuePoint[] = sentiment
     .filter((row) => !row.unavailable)
@@ -287,11 +292,18 @@ function stateFromLayerTip(layers: LayerRows, asOfUnix: number): AssetState {
       criticalValue: Number(b?.critical_value ?? b?.criticalValue ?? 1.49),
       bubbleFlag: Boolean(b?.bubble_flag ?? b?.bubbleFlag ?? false),
     },
-    lppls: {
-      lppConfidence: Number(l?.lpp_confidence ?? l?.lppConfidence ?? 0),
-      crashWindowStart: null,
-      crashWindowEnd: null,
-    },
+    lppls: (() => {
+      const tcRaw = l?.tc_estimate ?? l?.tcEstimate;
+      const startRaw = l?.crash_window_start ?? l?.crashWindowStart ?? tcRaw;
+      const endRaw = l?.crash_window_end ?? l?.crashWindowEnd ?? tcRaw;
+      return {
+        lppConfidence: Number(l?.lpp_confidence ?? l?.lppConfidence ?? 0),
+        crashWindowStart: startRaw ? new Date(String(startRaw)) : null,
+        crashWindowEnd: endRaw ? new Date(String(endRaw)) : null,
+        unavailable: Boolean(l?.unavailable ?? false),
+        tcEstimate: tcRaw ? new Date(String(tcRaw)) : null,
+      };
+    })(),
     sentiment: {
       sentimentVelocity: Number(s?.sentiment_velocity ?? s?.sentimentVelocity ?? 0),
       sentimentLevel: Number(s?.sentiment_level ?? s?.sentimentLevel ?? 0),
@@ -331,10 +343,16 @@ interface MarketStore {
   lpplsHistory: LPPLSPoint[];
   sentimentHistory: TimeValuePoint[];
   historyLoaded: boolean;
-  historySource: "api" | "fixture" | "empty";
+  historyAsset: string | null;
+  historySource: "api" | "static" | "fixture" | "empty";
   rawLayers: LayerRows;
-  loadHistoryFromApi: (asset: string, layers: LayerRows) => void;
+  loadHistoryFromApi: (
+    asset: string,
+    layers: LayerRows,
+    source?: "api" | "static"
+  ) => void;
   ensureFixtureHistories: () => void;
+  clearHistories: () => void;
   applyAsOf: (asset: string, dateIso: string) => void;
   jumpToEpisode: (dateIso: string) => void;
   replayMode: boolean;
@@ -355,7 +373,22 @@ function refreshBubbleScore(get: () => MarketStore, set: (p: Partial<MarketStore
 export const useMarketStore = create<MarketStore>((set, get) => ({
   currentAsset: "SP500_TOTAL_RETURN",
   setCurrentAsset: (asset) => {
-    set({ currentAsset: asset });
+    const same = get().historyAsset === asset;
+    set({
+      currentAsset: asset,
+      // Drop the previous book's rows until this book's history arrives.
+      ...(same
+        ? {}
+        : {
+            historyAsset: null,
+            rawLayers: {},
+            scoreHistory: [],
+            bsadfHistory: [],
+            lpplsHistory: [],
+            sentimentHistory: [],
+            historyLoaded: false,
+          }),
+    });
     refreshBubbleScore(get, set);
   },
   assetStates: {
@@ -480,43 +513,57 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
   lpplsHistory: [],
   sentimentHistory: [],
   historyLoaded: false,
+  historyAsset: null,
   historySource: "empty",
   rawLayers: {},
-  loadHistoryFromApi: (asset, layers) => {
-    const built = historiesFromLayers(layers);
+  loadHistoryFromApi: (asset, layers, source = "api") => {
+    const built = historiesFromLayers(layers, asset === "US_CASH_RETURN");
     if (!built.scoreHistory.length) {
-      get().ensureFixtureHistories();
+      get().clearHistories();
       return;
     }
     const tipUnix = built.scoreHistory[built.scoreHistory.length - 1].time;
-    const tipState = stateFromLayerTip(layers, tipUnix);
+    // A pinned date must survive switching books, or the homepage scrubber jumps to the tip.
+    const kept =
+      get().replayMode && get().replayTimestamp != null
+        ? get().replayTimestamp
+        : null;
+    const pinUnix = kept ?? tipUnix;
+    const tipState = stateFromLayerTip(layers, pinUnix);
     set({
       currentAsset: asset,
+      historyAsset: asset,
       rawLayers: layers,
       scoreHistory: built.scoreHistory,
       bsadfHistory: built.bsadfHistory,
       lpplsHistory: built.lpplsHistory,
       sentimentHistory: built.sentimentHistory,
       historyLoaded: true,
-      historySource: "api",
+      historySource: source,
       assetStates: { ...get().assetStates, [asset]: tipState },
-      bubbleScore: bubbleScoreFromState(tipState),
-      lastUpdate: new Date(tipUnix * 1000).toISOString(),
+      bubbleScore: asset === "US_CASH_RETURN" ? 0 : bubbleScoreFromState(tipState),
+      lastUpdate: new Date(pinUnix * 1000).toISOString(),
       replayMode: true,
-      replayTimestamp: tipUnix,
+      replayTimestamp: pinUnix,
+    });
+  },
+  clearHistories: () => {
+    set({
+      scoreHistory: [],
+      bsadfHistory: [],
+      lpplsHistory: [],
+      sentimentHistory: [],
+      historyLoaded: false,
+      historySource: "empty",
+      rawLayers: {},
     });
   },
   ensureFixtureHistories: () => {
-    if (get().historySource === "api") return;
-    const seeded = seedHistories();
-    set({
-      scoreHistory: seeded.scoreHistory,
-      bsadfHistory: seeded.bsadfHistory,
-      lpplsHistory: seeded.lpplsHistory,
-      sentimentHistory: seeded.sentimentHistory,
-      historyLoaded: false,
-      historySource: "fixture",
-    });
+    // Refuse seedHistories when real tape already loaded.
+    if (get().historySource === "api" || get().historySource === "static") return;
+    if (get().historyLoaded) return;
+    // Empty-state product path: no silent sine-wave charts.
+    get().clearHistories();
   },
   applyAsOf: (asset, dateIso) => {
     const layers = get().rawLayers;
@@ -528,7 +575,7 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
     // Refuse empty tip (before tape start) - snapAsOfIso already guards this.
     set({
       assetStates: { ...get().assetStates, [asset]: tipState },
-      bubbleScore: bubbleScoreFromState(tipState),
+      bubbleScore: asset === "US_CASH_RETURN" ? 0 : bubbleScoreFromState(tipState),
       lastUpdate: `${snapped}T00:00:00.000Z`,
       replayMode: true,
       replayTimestamp: unix,

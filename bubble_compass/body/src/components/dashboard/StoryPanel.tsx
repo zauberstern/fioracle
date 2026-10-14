@@ -38,11 +38,18 @@ export function StoryPanel() {
         <li>
           {glossary.newsTone.label}:{" "}
           {state.sentiment.unavailable
-            ? "unavailable (no headline tape)"
+            ? "off (no headlines in this history)"
             : `velocity ${state.sentiment.sentimentVelocity.toFixed(2)}`}
         </li>
         <li>
-          Tape source: {historySource === "api" ? "history parquet" : historySource}
+          From{" "}
+          {historySource === "api"
+            ? "the API"
+            : historySource === "static"
+              ? "the saved history"
+              : historySource === "fixture"
+                ? "a dev fixture"
+                : "an empty history"}
         </li>
       </ul>
     </section>

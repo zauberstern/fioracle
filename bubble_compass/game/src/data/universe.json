@@ -64,6 +64,126 @@
       "riskBucket": "cds",
       "spreadBps": 85,
       "elBps": 35
+    },
+    {
+      "id": "BBG_GLOBAL_AGG_TOTAL_RETURN",
+      "label": "Global bonds",
+      "color": "#3A342C",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "BBG_EURO_AGG_CHF_HEDGED_TOTAL_RETURN",
+      "label": "Europe bonds",
+      "color": "#5C5346",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "US_BOND_AGG_TOTAL_RETURN",
+      "label": "US aggregate bonds",
+      "color": "#8A7F6C",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "US_TIPS_0_5_TOTAL_RETURN",
+      "label": "US inflation-linked",
+      "color": "#2A241C",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "GLOBAL_ILB_0_5_TOTAL_RETURN",
+      "label": "Global inflation-linked",
+      "color": "#5C5E62",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "ISHARES_20Y_TREASURY_TOTAL_RETURN",
+      "label": "Long Treasuries",
+      "color": "#393C41",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "ISHARES_7_10Y_TREASURY_TOTAL_RETURN",
+      "label": "Intermediate Treasuries",
+      "color": "#3A342C",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "ISHARES_1_3Y_TREASURY_TOTAL_RETURN",
+      "label": "Short Treasuries",
+      "color": "#5C5346",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "ISHARES_SWISS_GOV_7_15_TOTAL_RETURN",
+      "label": "Swiss government bonds",
+      "color": "#8A7F6C",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "WTI_TOTAL_RETURN",
+      "label": "Oil",
+      "color": "#2A241C",
+      "riskBucket": "real",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "VRP_HARVEST_TOTAL_RETURN",
+      "label": "Volatility premium",
+      "color": "#5C5E62",
+      "riskBucket": "real",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "CHF_TOTAL_RETURN",
+      "label": "Swiss franc",
+      "color": "#393C41",
+      "riskBucket": "real",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "US_AAA_CORP_BOND_TOTAL_RETURN",
+      "label": "AAA corporates",
+      "color": "#3A342C",
+      "riskBucket": "credit",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "US_BAA_CORP_BOND_TOTAL_RETURN",
+      "label": "BAA corporates",
+      "color": "#5C5346",
+      "riskBucket": "credit",
+      "spreadBps": 0,
+      "elBps": 0
+    },
+    {
+      "id": "IBOXX_UK_IL_GILT_TOTAL_RETURN",
+      "label": "UK inflation-linked",
+      "color": "#8A7F6C",
+      "riskBucket": "rates",
+      "spreadBps": 0,
+      "elBps": 0
     }
   ]
 }

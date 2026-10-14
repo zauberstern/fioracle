@@ -65,6 +65,7 @@ export function useWebSocket({
             sentimentLevel: Number(
               state.sentiment.sentiment_level ?? state.sentiment.sentimentLevel
             ),
+            unavailable: Boolean(state.sentiment.unavailable ?? true),
           });
         }
         if (state.regime) {
@@ -113,6 +114,7 @@ export function useWebSocket({
           updateSentiment(assetId, {
             sentimentVelocity: Number(msg.sentiment_velocity),
             sentimentLevel: Number(msg.sentiment_level),
+            unavailable: Boolean(msg.unavailable ?? false),
           });
         } else if (msg.layer === "regime") {
           updateRegime(assetId, {

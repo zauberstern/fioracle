@@ -1,6 +1,8 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { useMarketStore } from "../../store/marketStore";
 import { glossary, regimeKey } from "../../copy/glossary";
+import { statusWord } from "../../narrator/heat";
+import { StatusMark } from "../reading/StatusMark";
 import { BubbleGauge } from "./BubbleGauge";
 import { RegimeBadge } from "./RegimeBadge";
 import { QuickFacts } from "./QuickFacts";
@@ -17,51 +19,49 @@ import { StressLanguageScore } from "../credit/StressLanguageScore";
 import "../credit/credit.css";
 import "./company-debt.css";
 
-const INDEX_DEBT_ROWS: DebtGridRow[] = [
-  {
-    id: "BBG_US_HIGH_YIELD_TOTAL_RETURN",
-    label: "US High Yield TR",
-    seriesType: "OTHER",
-    value: null,
-    asOf: "catalog",
-  },
-  {
-    id: "CDX_HY_5Y_TOTAL_RETURN",
-    label: "CDX HY 5Y TR",
-    seriesType: "CDX",
-    value: null,
-    asOf: "catalog",
-  },
-  {
-    id: "CDX_IG_5Y_TOTAL_RETURN",
-    label: "CDX IG 5Y TR",
-    seriesType: "CDX",
-    value: null,
-    asOf: "catalog",
-  },
-  {
-    id: "US_HY_CORP_OAS_TOTAL_RETURN",
-    label: "HY Corp OAS",
-    seriesType: "OAS",
-    value: null,
-    asOf: "catalog",
-  },
-  {
-    id: "US_DEBT_TO_GDP",
-    label: "US Debt/GDP",
-    seriesType: "OTHER",
-    value: null,
-    asOf: "catalog",
-  },
-];
+const ISSUER_GATE =
+  "Issuer CDS / Compustat / transcripts not entitled offline";
 
-const CREDIT_GATE =
-  "Issuer CDS / Compustat / transcripts not entitled; index CDX + HY OAS wired in catalog";
+function tipRow(
+  layers: Record<string, Array<Record<string, unknown>>>,
+  layer: string
+): Record<string, unknown> | null {
+  const rows = layers[layer];
+  if (!rows?.length) return null;
+  return rows[rows.length - 1] ?? null;
+}
 
 export function LeftRail() {
   const asset = useMarketStore((s) => s.currentAsset);
   const bubbleScore = useMarketStore((s) => s.bubbleScore);
   const regime = useMarketStore((s) => s.getAssetState(asset).regime.regimeState);
+  const layers = useMarketStore((s) => s.rawLayers);
+  const debt = tipRow(layers, "macro_debt");
+  const credit = tipRow(layers, "credit_trajectory");
+  const debtRows: DebtGridRow[] = [
+    {
+      id: "US_DEBT_TO_GDP",
+      label: "US Debt/GDP %",
+      seriesType: "OTHER",
+      value: debt?.debt_to_gdp != null ? Number(debt.debt_to_gdp) : null,
+      asOf: debt?.as_of != null ? String(debt.as_of).slice(0, 10) : "history",
+    },
+    {
+      id: "HY_OAS",
+      label: "HY OAS (bps)",
+      seriesType: "OAS",
+      value:
+        credit?.hy_oas_level_bps != null ? Number(credit.hy_oas_level_bps) : null,
+      asOf: credit?.as_of != null ? String(credit.as_of).slice(0, 10) : "history",
+    },
+    {
+      id: "VIX",
+      label: "VIX",
+      seriesType: "OTHER",
+      value: credit?.vix != null ? Number(credit.vix) : null,
+      asOf: credit?.as_of != null ? String(credit.as_of).slice(0, 10) : "history",
+    },
+  ];
 
   return (
     <aside className="left-rail">
@@ -74,7 +74,7 @@ export function LeftRail() {
       </div>
       <QuickFacts />
       <StoryPanel />
-      <CompanyDebtGrid rows={INDEX_DEBT_ROWS} />
+      <CompanyDebtGrid rows={debtRows} />
     </aside>
   );
 }
@@ -83,7 +83,15 @@ export function Dashboard() {
   const asset = useMarketStore((s) => s.currentAsset);
   const bubbleScore = useMarketStore((s) => s.bubbleScore);
   const regime = useMarketStore((s) => s.getAssetState(asset).regime);
+  const layers = useMarketStore((s) => s.rawLayers);
+  const historySource = useMarketStore((s) => s.historySource);
   const stateLabel = glossary[regimeKey(regime.regimeState)].label;
+  const credit = tipRow(layers, "credit_trajectory");
+  const toneUnavailable = credit == null || Boolean(credit.tone_unavailable ?? true);
+  const toneValue =
+    credit?.tone_value != null && Number.isFinite(Number(credit.tone_value))
+      ? Number(credit.tone_value)
+      : null;
 
   return (
     <div className="dashboard-root">
@@ -92,28 +100,41 @@ export function Dashboard() {
           <div className="dashboard-main">
             <div className="dashboard-hero">
               <div className="dashboard-hero-copy">
-                <h2>
-                  {asset}: {glossary.bubbleScore.label} {bubbleScore.toFixed(1)}
+                <h2 className="weekly-status-row">
+                  <StatusMark word={statusWord(bubbleScore)} />
+                  <span>
+                    {glossary.bubbleScore.label} {bubbleScore.toFixed(1)}
+                  </span>
                 </h2>
                 <p>
-                  Market state is {stateLabel} (
-                  {(regime.regimeConfidence * 100).toFixed(0)}% sure). Timeline spine
-                  below is the real history tape - not seeded sine waves.
+                  {statusWord(bubbleScore)} on this book. Warming starts at 40.
+                  Stretched starts at 70. The market state is {stateLabel}, with{" "}
+                  {(regime.regimeConfidence * 100).toFixed(0)} percent confidence.
+                  {historySource === "empty"
+                    ? " No history is loaded."
+                    : " The chart below is this book's history."}
                 </p>
               </div>
               <BubbleGauge score={bubbleScore} />
             </div>
             <div className="credit-radar-grid">
               <ToneVsMarketGauge
-                value={null}
-                unavailable
-                reason={CREDIT_GATE}
-                source="vix_oas_proxy_or_transcripts"
+                value={toneValue}
+                unavailable={toneUnavailable}
+                reason={
+                  toneUnavailable
+                    ? "Need VIX and the high-yield spread change in this history (or management tone)"
+                    : undefined
+                }
+                source="vix_oas_proxy"
               />
-              <PDDisagreementCloud unavailable reason={CREDIT_GATE} />
-              <CreditSurfaceTracker unavailable reason={CREDIT_GATE} />
-              <CliffMap unavailable reason={CREDIT_GATE} />
-              <BreachCalendar unavailable reason={CREDIT_GATE} />
+              <PDDisagreementCloud unavailable reason={ISSUER_GATE} />
+              <CreditSurfaceTracker
+                unavailable
+                reason="Index surface only; issuer LTV panels not offline"
+              />
+              <CliffMap unavailable reason={ISSUER_GATE} />
+              <BreachCalendar unavailable reason={ISSUER_GATE} />
               <StressLanguageScore unavailable reason="No 10-K text corpus in catalog" />
             </div>
           </div>

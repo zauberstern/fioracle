@@ -10,7 +10,7 @@ export function CrisisAlert() {
   return (
     <Hint entry="crisisAlert">
       <div className="crisis-alert" role="alert">
-        <span className="crisis-alert-tag">CRISIS</span>
+        <span className="crisis-alert-tag">Stretched</span>
         <span className="crisis-alert-copy">{crisisHeadline(asset, score)}</span>
       </div>
     </Hint>

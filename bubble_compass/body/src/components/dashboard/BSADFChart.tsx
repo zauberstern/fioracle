@@ -1,6 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
-  HistogramSeries,
   LineSeries,
   type ISeriesApi,
   type UTCTimestamp,
@@ -9,15 +8,20 @@ import {
   useLightweightChart,
   safeRemoveSeries,
 } from "../../hooks/useLightweightChart";
-import { sliceByCutoff, useChartCutoff } from "../../hooks/useChartData";
+import {
+  FAST_RISE_PLOT_TOP,
+  chartRows,
+  plotFastRise,
+  useChartCutoff,
+} from "../../hooks/useChartData";
 import { useMarketStore } from "../../store/marketStore";
+import { plainDate } from "../../../../shared/plainDate";
 
-export function BSADFChart() {
+export function BSADFChart({ fullSpan = false }: { fullSpan?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chart = useLightweightChart(containerRef);
   const statRef = useRef<ISeriesApi<"Line"> | null>(null);
   const cvRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const excessRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const history = useMarketStore((s) => s.bsadfHistory);
   const cutoff = useChartCutoff();
 
@@ -25,56 +29,74 @@ export function BSADFChart() {
     if (!chart) return;
 
     const statSeries = chart.addSeries(LineSeries, {
-      color: "#56B4E9",
+      color: "#0072B2",
       lineWidth: 2,
-      title: "Stretch",
+      title: "Fast rise",
     });
     const cvSeries = chart.addSeries(LineSeries, {
-      color: "#E69F00",
+      color: "#5C5E62",
       lineWidth: 1,
       lineStyle: 2,
-      title: "Line",
-    });
-    const excessSeries = chart.addSeries(HistogramSeries, {
-      color: "#D55E00",
-      priceScaleId: "excess",
-    });
-    chart.priceScale("excess").applyOptions({
-      scaleMargins: { top: 0.7, bottom: 0 },
+      title: "Ordinary line",
     });
 
     statRef.current = statSeries;
     cvRef.current = cvSeries;
-    excessRef.current = excessSeries;
 
     return () => {
       statRef.current = null;
       cvRef.current = null;
-      excessRef.current = null;
-      safeRemoveSeries(chart, excessSeries);
       safeRemoveSeries(chart, cvSeries);
       safeRemoveSeries(chart, statSeries);
     };
   }, [chart]);
 
+  const shown = useMemo(
+    () => chartRows(history, cutoff, fullSpan),
+    [history, cutoff, fullSpan]
+  );
+  const clipped = shown.filter((d) => d.stat > FAST_RISE_PLOT_TOP).length;
+  const tip = shown[shown.length - 1];
+
   useEffect(() => {
-    if (!chart || !statRef.current || !cvRef.current || !excessRef.current) return;
-    const sliced = sliceByCutoff(history, cutoff);
+    if (!chart || !statRef.current || !cvRef.current) return;
     statRef.current.setData(
-      sliced.map((d) => ({ time: d.time as UTCTimestamp, value: d.stat }))
-    );
-    cvRef.current.setData(
-      sliced.map((d) => ({ time: d.time as UTCTimestamp, value: d.cv }))
-    );
-    excessRef.current.setData(
-      sliced.map((d) => ({
+      shown.map((d) => ({
         time: d.time as UTCTimestamp,
-        value: Number((d.stat - d.cv).toFixed(3)),
-        color: d.stat > d.cv ? "#D55E00" : "#2A3140",
+        value: plotFastRise(d.stat),
       }))
     );
+    cvRef.current.setData(
+      shown.map((d) => ({ time: d.time as UTCTimestamp, value: d.cv }))
+    );
     chart.timeScale().fitContent();
-  }, [chart, history, cutoff]);
+  }, [chart, shown]);
 
-  return <div ref={containerRef} className="chart-container" />;
+  const tipDate =
+    tip != null
+      ? plainDate(new Date(tip.time * 1000).toISOString().slice(0, 10))
+      : "";
+  const tipReading =
+    tip == null
+      ? ""
+      : Math.abs(tip.stat) >= 100
+        ? Math.round(tip.stat).toLocaleString("en-US")
+        : tip.stat.toFixed(2);
+  const first = shown[0];
+  const span =
+    fullSpan && first && tip
+      ? `This chart runs from ${plainDate(new Date(first.time * 1000).toISOString().slice(0, 10))} through ${tipDate}. `
+      : "";
+  const caption = !tip
+    ? "The series are still loading."
+    : clipped > 0
+      ? `${span}On ${tipDate} the fast-rise reading is ${tipReading}. The ordinary line is ${tip.cv.toFixed(2)}. ${clipped} ${clipped === 1 ? "row sits" : "rows sit"} far above that line, so those points are drawn at ${FAST_RISE_PLOT_TOP}.`
+      : `${span}On ${tipDate} the fast-rise reading is ${tipReading}. The ordinary line is ${tip.cv.toFixed(2)}.`;
+
+  return (
+    <div className="score-chart-wrap">
+      <p className="chart-caption">{caption}</p>
+      <div ref={containerRef} className="chart-container" />
+    </div>
+  );
 }

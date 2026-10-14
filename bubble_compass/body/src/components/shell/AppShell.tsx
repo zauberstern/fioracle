@@ -1,65 +1,125 @@
-import { Group, Panel, Separator } from "react-resizable-panels";
-import * as Tabs from "@radix-ui/react-tabs";
-import { TopBar } from "../dashboard/TopBar";
-import { Dashboard, LeftRail } from "../dashboard/Dashboard";
-import { WorldCanvas } from "../../world/WorldCanvas";
+import { useCallback, useEffect, useState } from "react";
+import { WeeklyReading } from "../reading/WeeklyReading";
+import { CloserView } from "../reading/CloserView";
+import { ThenView } from "../reading/ThenView";
+import { DiagnosticsView } from "../reading/DiagnosticsView";
+import { PitchView } from "../reading/PitchView";
 import { GameEmbed } from "../game/GameEmbed";
-import { CrisisAlert } from "./CrisisAlert";
-import { glossary } from "../../copy/glossary";
-import { Hint, HintProvider } from "../ui/Hint";
+import { HintProvider } from "../ui/Hint";
 import { useMarketStore } from "../../store/marketStore";
 import { useHistoryTape } from "../../hooks/useHistoryTape";
 import { useWebSocket } from "../../hooks/useWebSocket";
+import meridianLogo from "../../assets/meridian-logo.png";
+
+const NAV: Array<{ view: ReadingView; label: string }> = [
+  { view: "about", label: "How it works" },
+  { view: "closer", label: "Look closer" },
+  { view: "then", label: "History" },
+  { view: "diagnostics", label: "Diagnostics" },
+  { view: "stillmoor", label: "Stillmoor" },
+];
+
+export type ReadingView =
+  | "home"
+  | "closer"
+  | "then"
+  | "stillmoor"
+  | "diagnostics"
+  | "about";
+
+function parseHash(hash: string): ReadingView {
+  const h = hash.replace(/^#\/?/, "").toLowerCase();
+  if (h === "closer") return "closer";
+  if (h === "then") return "then";
+  if (h === "stillmoor") return "stillmoor";
+  if (h === "diagnostics") return "diagnostics";
+  if (h === "about") return "about";
+  return "home";
+}
+
+function hashFor(view: ReadingView): string {
+  if (view === "home") return "#/";
+  return `#/${view}`;
+}
 
 export function AppShell() {
   const asset = useMarketStore((s) => s.currentAsset);
-  const enableWorld3d = useMarketStore((s) => s.enableWorld3d);
   useHistoryTape(asset);
   useWebSocket({ asset, autoReconnect: true });
 
+  const [view, setView] = useState<ReadingView>(() =>
+    typeof window !== "undefined" ? parseHash(window.location.hash) : "home"
+  );
+
+  useEffect(() => {
+    const onHash = () => setView(parseHash(window.location.hash));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const navigate = useCallback((next: ReadingView | string) => {
+    const v =
+      typeof next === "string"
+        ? parseHash(next.startsWith("#") ? next : `#/${next}`)
+        : next;
+    const target = hashFor(v);
+    if (window.location.hash !== target) {
+      window.location.hash = target;
+    } else {
+      setView(v);
+    }
+  }, []);
+
   return (
     <HintProvider>
-      <div className="app-shell">
-        <TopBar />
-        <CrisisAlert />
-        <div className="app-shell-body">
-          <Group orientation="horizontal" style={{ height: "100%" }}>
-            <Panel id="rail" defaultSize="20" minSize="15" maxSize="28">
-              <LeftRail />
-            </Panel>
-            <Separator className="resize-handle" />
-            <Panel id="main" defaultSize="80" minSize="50">
-              <Tabs.Root className="main-tabs" defaultValue="dashboard">
-                <Tabs.List className="tab-list" aria-label="Primary views">
-                  <Tabs.Trigger value="dashboard">
-                    <Hint entry="overview">{glossary.overview.label}</Hint>
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="game">
-                    <Hint entry="game">{glossary.game.label}</Hint>
-                  </Tabs.Trigger>
-                  {enableWorld3d ? (
-                    <Tabs.Trigger value="world">
-                      <Hint entry="world">
-                        {glossary.world.label}{" "}
-                        <span className="tab-sub">(flagged)</span>
-                      </Hint>
-                    </Tabs.Trigger>
-                  ) : null}
-                </Tabs.List>
-                <Tabs.Content value="dashboard" className="tab-content">
-                  <Dashboard />
-                </Tabs.Content>
-                <Tabs.Content value="game" className="tab-content">
-                  <GameEmbed />
-                </Tabs.Content>
-                {enableWorld3d ? (
-                  <Tabs.Content value="world" className="tab-content">
-                    <WorldCanvas />
-                  </Tabs.Content>
-                ) : null}
-              </Tabs.Root>
-            </Panel>
-          </Group>
+      <div className="app-shell reading-shell">
+        {view === "stillmoor" ? null : (
+          <header className="reading-header">
+            <button
+              type="button"
+              className="reading-brand"
+              onClick={() => navigate("home")}
+            >
+              <img src={meridianLogo} alt="" />
+              Meridian
+            </button>
+            <nav className="reading-nav" aria-label="Sections">
+              {NAV.map((item) => (
+                <button
+                  key={item.view}
+                  type="button"
+                  aria-current={view === item.view ? "page" : undefined}
+                  onClick={() => navigate(item.view)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </header>
+        )}
+        <div className="app-shell-body reading-body">
+          {view === "home" ? <WeeklyReading /> : null}
+          {view === "closer" ? <CloserView /> : null}
+          {view === "then" ? (
+            <ThenView onBack={() => navigate("home")} />
+          ) : null}
+          {view === "diagnostics" ? <DiagnosticsView /> : null}
+          {view === "about" ? <PitchView /> : null}
+          {view === "stillmoor" ? (
+            <div className="stillmoor-view">
+              <header className="stillmoor-chrome">
+                <button
+                  type="button"
+                  className="reading-back"
+                  onClick={() => navigate("home")}
+                >
+                  Back to this week
+                </button>
+                <span className="stillmoor-construction">Under construction</span>
+              </header>
+              <GameEmbed />
+            </div>
+          ) : null}
         </div>
       </div>
     </HintProvider>

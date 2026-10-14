@@ -24,19 +24,19 @@ export function useLightweightChart(
 
     const instance = createChart(el, {
       layout: {
-        background: { type: ColorType.Solid, color: "#0B0E11" },
-        textColor: "#9AA4B2",
+        background: { type: ColorType.Solid, color: "#FFFEFB" },
+        textColor: "#171A20",
         fontFamily: "IBM Plex Sans, sans-serif",
-        attributionLogo: true,
+        attributionLogo: false,
       },
       grid: {
-        vertLines: { color: "#2A3140" },
-        horzLines: { color: "#2A3140" },
+        vertLines: { color: "#E4E2DC" },
+        horzLines: { color: "#E4E2DC" },
       },
       crosshair: { mode: CrosshairMode.Magnet },
-      rightPriceScale: { borderColor: "#2A3140" },
+      rightPriceScale: { borderColor: "#D0D1D2" },
       timeScale: {
-        borderColor: "#2A3140",
+        borderColor: "#D0D1D2",
         timeVisible: true,
         secondsVisible: false,
       },
