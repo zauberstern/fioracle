@@ -116,8 +116,12 @@
   var wantedDay = hashParts[1] || "";
   var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function plainDate(iso) {
-    var p = String(iso).slice(0, 10).split("-");
-    return Number(p[2]) + " " + months[Number(p[1]) - 1] + " " + p[0];
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso).trim());
+    if (!m) return String(iso);
+    var month = months[Number(m[2]) - 1];
+    var day = Number(m[3]);
+    if (!month || !day) return String(iso);
+    return day + " " + month + " " + m[1];
   }
   fetch("../sandbox/data/baseline.json")
     .then(function (res) { return res.ok ? res.json() : null; })

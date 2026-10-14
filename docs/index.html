@@ -8,13 +8,13 @@
 <link rel="canonical" href="https://zauberstern.github.io/fioracle/" />
 <meta property="og:title" content="FIOracle -- Crisis-convexity research for fixed income" />
 <meta property="og:description" content="Regime-aware crisis-convexity research software for fixed income allocators. Pre-registered gates. Not investment advice." />
-<meta property="og:type" content="website" />
+<meta property="og:image" content="https://zauberstern.github.io/fioracle/fi-oracle.png" />
 <meta property="og:url" content="https://zauberstern.github.io/fioracle/" />
 <meta name="twitter:card" content="summary" />
 <meta name="theme-color" content="#07080c" />
 <meta name="robots" content="index,follow" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self' https://formspree.io; object-src 'none'; frame-ancestors 'none'" />
-<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="fi-oracle.png" type="image/png" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -28,7 +28,10 @@
 </div>
 
 <nav class="nav" aria-label="Primary">
-  <span class="nav-logo">FI<span class="accent">ORACLE</span></span>
+  <a class="nav-logo" href="#main">
+    <img src="fi-oracle.png" alt="" width="1024" height="1024">
+    <span>FI<span class="accent">ORACLE</span></span>
+  </a>
   <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">Menu</button>
   <div class="nav-links" id="nav-links">
     <a href="#what">What It Does</a>
@@ -45,29 +48,41 @@
 </nav>
 
 <header class="hero">
-  <div class="hero-inner">
-    <span class="eyebrow">For fixed income allocators and risk committees</span>
-    <h1 id="hero-title" class="hero-title">
-      <span class="line">When everything else is</span><br/>
-      <span class="line">falling, what happens to <span class="accent">you</span>?</span>
-    </h1>
-    <p id="hero-subtitle" class="hero-subtitle">
-      FIOracle is a regime-aware crisis-convexity <strong>research system</strong> for fixed income.
-      It is judged by pre-registered statistical gates before anyone is allowed to sell a performance story.
-      The published FI allocation SPA versus Agg / 60-40 remains a <strong>null</strong>.
-    </p>
-    <div class="hero-cta">
-      <a href="#briefing" class="btn btn-primary">Request a Briefing</a>
-      <a href="manifesto.html" class="btn btn-ghost">Read the Manifesto</a>
+  <div class="hero-stage">
+    <img class="hero-mark" src="fi-oracle.png" alt="FIOracle mark" width="1024" height="1024">
+    <div class="hero-copy">
+      <span class="eyebrow">For fixed income allocators and risk committees</span>
+      <h1 id="hero-title" class="hero-title">
+        <span class="line">When everything else is</span><br/>
+        <span class="line">falling, what happens to <span class="accent">you</span>?</span>
+      </h1>
+      <p id="hero-subtitle" class="hero-subtitle">
+        FIOracle is a regime-aware crisis-convexity <strong>research system</strong> for fixed income.
+        It is judged by pre-registered statistical gates before anyone is allowed to sell a performance story.
+        The published FI allocation SPA versus Agg / 60-40 remains a <strong>null</strong>.
+      </p>
+      <div class="hero-cta">
+        <a href="#briefing" class="btn btn-primary">Request a Briefing</a>
+        <a href="manifesto.html" class="btn btn-ghost">Read the Manifesto</a>
+      </div>
     </div>
   </div>
-  <div class="hero-orbs" id="hero-orbs" aria-hidden="true">
-    <div class="orb orb-calm" data-regime="calm"></div>
-    <div class="orb orb-inflation" data-regime="inflation"></div>
-    <div class="orb orb-crisis" data-regime="crisis"></div>
-  </div>
-  <div class="scroll-cue">scroll</div>
 </header>
+
+<section class="mark-row" aria-label="Two readings">
+  <a class="mark-card" href="sandbox/">
+    <img class="mark-bird" src="fi-oracle.png" alt="" width="1024" height="1024">
+    <span class="mark-name">The book</span>
+    <span class="mark-note">Saved regimes and weights</span>
+  </a>
+  <a class="mark-card" href="compass/">
+    <span class="meridian-crop" aria-hidden="true">
+      <img src="meridian_logo.jpeg" alt="" width="2752" height="1536">
+    </span>
+    <span class="mark-name">Meridian</span>
+    <span class="mark-note">23 books on the date you pin</span>
+  </a>
+</section>
 
 <section class="trust-bar reveal" aria-label="Trust signals">
   <div class="trust-item"><span class="trust-num" data-trust="testFiles">--</span><span class="trust-label">automated test files</span></div>
@@ -121,7 +136,7 @@
     <div class="regime-orb regime-calm" data-target="calm" role="button" tabindex="0" aria-pressed="false" style="left:12%; top:18%;">
       <span>Calm</span>
     </div>
-    <div class="regime-orb regime-inflation" data-target="inflation" role="button" tabindex="0" aria-pressed="false" style="left:70%; top:18%;">
+    <div class="regime-orb regime-inflation" data-target="inflationary" role="button" tabindex="0" aria-pressed="false" style="left:70%; top:18%;">
       <span>Inflationary</span>
     </div>
     <div class="regime-orb regime-crisis" data-target="crisis" role="button" tabindex="0" aria-pressed="true" style="left:41%; top:70%;">
@@ -303,6 +318,9 @@
     <a href="#compliance">Compliance</a> ·
     <a href="manifesto.html">Manifesto</a> ·
     <a href="leavebehind.html">Leave-behind</a>
+  </p>
+  <p class="footer-meridian">
+    <a href="compass/"><img src="meridian_logo.jpeg" alt="Meridian" width="2752" height="1536"></a>
   </p>
   <p class="footer-small">Built as a work of art and a working thesis. MIT licensed.</p>
   <p class="footer-version">
