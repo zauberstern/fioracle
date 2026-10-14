@@ -20,6 +20,43 @@
     status.textContent = line;
   }
 
+  function mixedDays(bundle) {
+    var dates = bundle.dates || [];
+    return dates.filter(function (day) {
+      var view = bundle.by_date && bundle.by_date[day];
+      if (!view) return false;
+      return (view.weights || []).some(function (w) {
+        return !w.cash && Math.abs(w.weight) > 0.01;
+      });
+    });
+  }
+
+  function sameWeights(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id !== b[i].id) return false;
+      if (Math.abs(a[i].weight - b[i].weight) > 1e-6) return false;
+    }
+    return true;
+  }
+
+  function describeDay() {
+    var bundle = state.bundle;
+    var view = slice();
+    var line = "Showing " + plainDate(state.day) + ".";
+    if (state.day !== bundle.as_of) {
+      line += " The saved run ends " + plainDate(bundle.as_of) + ".";
+    }
+    var matchDay = null;
+    (bundle.dates || []).forEach(function (day) {
+      if (day === state.day || matchDay) return;
+      var other = bundle.by_date && bundle.by_date[day];
+      if (other && sameWeights(other.weights, view && view.weights)) matchDay = day;
+    });
+    if (matchDay) line += " The weights match " + plainDate(matchDay) + ".";
+    status.textContent = line;
+  }
+
   function slice() {
     var bundle = state.bundle;
     if (!bundle) return null;
@@ -140,7 +177,7 @@
     schemaLink.href = "data/trees/" + assetId + ".schema.json";
     schemaLink.setAttribute("download", assetId + ".schema.json");
     button.classList.remove("is-off");
-    button.href = "../world3d/#" + encodeURIComponent(assetId);
+    button.href = "../world3d/#" + encodeURIComponent(assetId) + "@" + state.day;
     note.textContent = "";
     snippet.textContent = [
       "import json",
@@ -178,6 +215,7 @@
         state.day = day;
         bind();
         render();
+        describeDay();
       });
       dates.appendChild(button);
     });
@@ -210,11 +248,12 @@
       if (!bundle) return;
       if (!bundle.as_of) throw new Error("baseline");
       state.bundle = bundle;
-      state.day = bundle.as_of;
+      var mixed = mixedDays(bundle);
+      state.day = mixed.length ? mixed[mixed.length - 1] : bundle.as_of;
       body.hidden = false;
-      status.textContent = "Saved run dated " + plainDate(bundle.as_of) + ".";
       bind();
       render();
+      describeDay();
     })
     .catch(function (err) {
       if (String(err && err.message) === "missing") {

@@ -110,7 +110,15 @@
     if (reduced) listPath(nodes);
   }
 
-  var wanted = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+  var raw = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+  var hashParts = raw.split("@");
+  var wanted = hashParts[0];
+  var wantedDay = hashParts[1] || "";
+  var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function plainDate(iso) {
+    var p = String(iso).slice(0, 10).split("-");
+    return Number(p[2]) + " " + months[Number(p[1]) - 1] + " " + p[0];
+  }
   fetch("../sandbox/data/baseline.json")
     .then(function (res) { return res.ok ? res.json() : null; })
     .then(function (bundle) {
@@ -118,14 +126,14 @@
         note.textContent = "This decision was not exported.";
         return;
       }
-      var day = bundle.as_of;
+      var day = (wantedDay && bundle.by_date && bundle.by_date[wantedDay]) ? wantedDay : bundle.as_of;
       var view = (bundle.by_date && bundle.by_date[day]) || bundle;
       var assets = view.assets || [];
       var match = assets.filter(function (row) { return row.id === wanted; })[0];
       var asset = match || assets[0];
       if (!match) note.textContent = "This decision was not exported.";
       if (!asset) return;
-      title.textContent = asset.label || asset.id;
+      title.textContent = (asset.label || asset.id) + ", " + plainDate(day);
       var probs = [
         Number(asset.p_calm) || 0,
         Number(asset.p_inflationary) || 0,
