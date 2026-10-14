@@ -169,17 +169,17 @@ A gradient-boosted classifier predicts tomorrow's regime using today's features:
 
 *CHF acts as a flight-to-quality asset—crisis regimes align with periods when investors seek Swiss Franc safety.*
 
-![CHF Regime Timeline](output/figures/historical/regime_timeline_CHF.png)
+![CHF Regime Timeline](output/max_cap/figures/historical/regime_timeline_CHF.png)
 
 *US Treasuries show regime shifts during rate cycles—crisis periods match flight-to-quality rallies and rate shock selloffs.*
 
-![US 10Y Treasury Regime Timeline](output/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
+![US 10Y Treasury Regime Timeline](output/max_cap/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
 
 **Feature Importance**
 
 *Volatility (VIX) dominates regime prediction—market stress signals are the strongest leading indicator of regime transitions.*
 
-![Feature Importance](output/figures/test/xgb_diagnostics/aggregate_feature_importance.png)
+![Feature Importance](output/max_cap/figures/test/xgb_diagnostics/aggregate_feature_importance.png)
 
 ### 3. Portfolio Optimization
 
@@ -200,37 +200,37 @@ Three strategies execute regime-conditioned allocations:
 
 <h2 id="results">Results</h2>
 
-### Out-of-Sample Performance (2008–2025)
+### Out-of-sample test window
 
-Regenerated under paper freeze `dataset_id=fioracle_ds_v1` with **walk-forward** (`regimes.rolling.enabled: true`) and store PIT backend. Source: `paper/tables/headline_oos.csv`.
+These rows are the 31 Jul 2026 store run on `fioracle_ds_v2`, 4,506 test days. Source: `paper/tables/headline_oos.csv`. Total return is the change over that window, not an annual rate. The FI allocation SPA versus Agg / 60-40 is still a null, and the gate remains `cleared: false`.
 
 | Metric | MinVar | MVO | EW |
 |--------|--------|-----|-----|
-| **Sharpe Ratio** | −0.20 | 0.02 | −0.05 |
-| **Total Return** | −4.7% | −1.8% | −2.7% |
-| **Max Drawdown** | −7.3% | −26.6% | −8.3% |
+| **Sharpe ratio** | 0.37 | 0.48 | 0.74 |
+| **Total return** | 15.0% | 56.5% | 93.3% |
+| **Max drawdown** | −4.8% | −11.2% | −15.3% |
 
 Parent method paper (not FIOracle): [`paper.pdf`](paper.pdf) = Shu, Yu & Mulvey (2024).
 
 ### Cumulative Wealth Growth
 
-![Cumulative Returns](output/figures/test/ew/cumulative_returns.png)
+![Cumulative Returns](output/max_cap/figures/test/ew/cumulative_returns.png)
 
 ### Drawdown Analysis
 
-![Drawdown](output/figures/test/ew/drawdown.png)
+![Drawdown](output/max_cap/figures/test/ew/drawdown.png)
 
 ### Dynamic Allocation
 
-![Allocation Timeline](output/figures/test/ew/allocation_timeline.png)
+![Allocation Timeline](output/max_cap/figures/test/ew/allocation_timeline.png)
 
 ### Rolling Sharpe Ratio
 
-![Rolling Sharpe](output/figures/test/ew/rolling_sharpe.png)
+![Rolling Sharpe](output/max_cap/figures/test/ew/rolling_sharpe.png)
 
 ### Monthly Returns Heatmap
 
-![Monthly Returns](output/figures/test/ew/monthly_heatmap.png)
+![Monthly Returns](output/max_cap/figures/test/ew/monthly_heatmap.png)
 
 ---
 
@@ -320,7 +320,7 @@ data:
   val_end: 2007-12-31
   test_start: 2008-01-01
   backend: store             # after Phase 1 cutover
-  dataset_id: fioracle_ds_v1
+  dataset_id: fioracle_ds_v2
 
 regimes:
   jump_model:
