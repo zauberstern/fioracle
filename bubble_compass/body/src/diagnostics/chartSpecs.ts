@@ -70,16 +70,60 @@ function baseLayout(title: string): Record<string, unknown> {
   };
 }
 
+const HEAT_STOPS: Array<[number, string]> = [
+  [0, "#E1DCCE"],
+  [20, "#D0BA9B"],
+  [39, "#C4AD88"],
+  [40, "#BD9968"],
+  [55, "#A6764C"],
+  [69, "#8E542F"],
+  [70, "#6E442C"],
+  [85, "#5C3A28"],
+  [100, "#503427"],
+];
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const part = (v: number) => Math.round(v).toString(16).padStart(2, "0");
+  return `#${part(r)}${part(g)}${part(b)}`.toUpperCase();
+}
+
+/** Warm ramp. The stops at 39/40 and 69/70 stay different shades. */
+export function heatShade(score: number): string {
+  const h = Math.max(0, Math.min(100, score));
+  for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
+    const [a, ca] = HEAT_STOPS[i]!;
+    const [b, cb] = HEAT_STOPS[i + 1]!;
+    const last = i === HEAT_STOPS.length - 2;
+    if (h < b || (h === b && last) || (h > a && h < b)) {
+      if (h === a) return ca;
+      const t = b === a ? 0 : (h - a) / (b - a);
+      const from = hexToRgb(ca);
+      const to = hexToRgb(cb);
+      return rgbToHex(
+        from[0] + (to[0] - from[0]) * t,
+        from[1] + (to[1] - from[1]) * t,
+        from[2] + (to[2] - from[2]) * t
+      );
+    }
+  }
+  return HEAT_STOPS[HEAT_STOPS.length - 1]![1];
+}
+
 function timeLayout(
-  title: string,
   xRange?: [string, string],
   pin?: string
 ): Record<string, unknown> {
-  const layout = baseLayout(title);
   return {
-    ...layout,
+    paper_bgcolor: READING.page,
+    plot_bgcolor: READING.page,
+    font: { family: "IBM Plex Sans, sans-serif", size: 14, color: READING.ink },
     showlegend: false,
-    margin: { t: 12, r: 16, b: 36, l: 44 },
+    margin: { t: 8, r: 16, b: 36, l: 44 },
     xaxis: {
       type: "date",
       hoverformat: "%d %b %Y",
@@ -150,6 +194,7 @@ export function buildCharts(opts: {
   const heatLabels: string[] = [];
   const heatVals: number[] = [];
   const heatColors: string[] = [];
+  const edgeWidths: number[] = [];
   for (const s of sleeves) {
     const layers = layersByAsset[s.id] ?? {};
     const tip = tipFromLayerRows(layers, pin);
@@ -157,7 +202,8 @@ export function buildCharts(opts: {
     assertField("heat");
     heatLabels.push(s.label);
     heatVals.push(h);
-    heatColors.push(s.color);
+    heatColors.push(heatShade(h));
+    edgeWidths.push(s.id === selectedId ? 2 : 0);
   }
   const heat: PlotBundle = {
     data: [
@@ -166,17 +212,22 @@ export function buildCharts(opts: {
         orientation: "h",
         y: heatLabels,
         x: heatVals,
-        marker: { color: heatColors },
+        marker: {
+          color: heatColors,
+          line: { color: READING.ink, width: edgeWidths },
+        },
         hovertemplate: "%{y}<br>%{x:.0f}<br>%{customdata}<extra></extra>",
         customdata: heatVals.map((h) => statusWord(h)),
       },
     ],
     layout: {
-      ...baseLayout("Heat by book"),
+      ...baseLayout(""),
+      title: undefined,
+      dragmode: false,
       height: Math.max(360, sleeves.length * 22 + 96),
-      margin: { t: 48, r: 24, b: 48, l: 160 },
-      xaxis: { range: [0, 100], title: "Heat" },
-      yaxis: { autorange: "reversed", automargin: true },
+      margin: { t: 8, r: 24, b: 36, l: 160 },
+      xaxis: { range: [0, 100], title: "Heat", fixedrange: true },
+      yaxis: { autorange: "reversed", automargin: true, fixedrange: true },
       showlegend: false,
     },
   };
@@ -199,7 +250,7 @@ export function buildCharts(opts: {
         line: { color: READING.signal },
       },
     ],
-    layout: timeLayout("Standardised residual", xRange, pin),
+    layout: timeLayout(xRange, pin),
   };
 
   const stat = series(bsadf, "bsadf_stat");
@@ -247,7 +298,7 @@ export function buildCharts(opts: {
         marker: { color: PALETTE.vermilion, size: 8 },
       },
     ],
-    layout: timeLayout("Stretch and critical value", xRange, pin),
+    layout: timeLayout(xRange, pin),
   };
 
   assertField("boom_probability");
@@ -294,7 +345,7 @@ export function buildCharts(opts: {
       },
     ],
     layout: {
-      ...timeLayout("Boom and bust probabilities", xRange, pin),
+      ...timeLayout(xRange, pin),
       yaxis: { title: "Percent", range: [0, 100], zeroline: false },
     },
   };

@@ -14,7 +14,7 @@ const HISTORY_BASE =
 
 const SLEEVES: SleeveDef[] = BOOKS.map((b, i) => ({
   id: b.id,
-  label: b.name,
+  label: b.short,
   color: i % 2 === 0 ? READING.ink : READING.signal,
   cash: b.cash,
 }));
@@ -113,7 +113,7 @@ export function DiagnosticsView() {
     return best;
   }, [byId]);
 
-  const asOf = useMemo(() => {
+  const clockDay = useMemo(() => {
     if (replayTimestamp != null) {
       return new Date(replayTimestamp * 1000).toISOString().slice(0, 10);
     }
@@ -122,13 +122,15 @@ export function DiagnosticsView() {
 
   const sliderIndex = useMemo(() => {
     if (!spine.length) return 0;
-    if (!asOf) return spine.length - 1;
+    if (!clockDay) return spine.length - 1;
     let best = 0;
     for (let i = 0; i < spine.length; i++) {
-      if (spine[i]! <= asOf) best = i;
+      if (spine[i]! <= clockDay) best = i;
     }
     return best;
-  }, [spine, asOf]);
+  }, [spine, clockDay]);
+
+  const asOf = spine[sliderIndex] || clockDay;
 
   const xRange = useMemo((): [string, string] | undefined => {
     if (spine.length < 2) return undefined;
@@ -149,6 +151,11 @@ export function DiagnosticsView() {
   const book = BOOKS.find((b) => b.id === currentAsset) ?? {
     id: currentAsset,
     name: "This book",
+    short: "This book",
+    plain: "This book",
+    mark: "",
+    group: "",
+    hint: "",
   };
   const layers = byId[currentAsset];
   const lines = useMemo(() => {
@@ -173,9 +180,15 @@ export function DiagnosticsView() {
     });
   }, [layers, asOf, book]);
 
-  const paint = (mode: "react" | "restyle") => {
+  const paint = (mode: "react" | "resize") => {
     if (!plotly || !charts) return;
-    const cfg = { displayModeBar: false, responsive: true };
+    const heatCfg = {
+      displayModeBar: false,
+      responsive: true,
+      scrollZoom: false,
+      doubleClick: false,
+    };
+    const timeCfg = { displayModeBar: false, responsive: true };
     const boxes: Array<[HTMLDivElement | null, { data: Trace[]; layout: Record<string, unknown> }]> = [
       [heatRef.current, charts.heat as { data: Trace[]; layout: Record<string, unknown> }],
       [rzRef.current, charts.residualZ as { data: Trace[]; layout: Record<string, unknown> }],
@@ -186,20 +199,12 @@ export function DiagnosticsView() {
       if (!el) continue;
       const height = Math.max(el.clientHeight, 80);
       const width = Math.max(el.clientWidth, 80);
-      const layout = { ...spec.layout, height, width };
-      if (mode === "react" || !drawn.current) {
-        plotly.react(el, spec.data, layout, cfg);
-      } else {
-        spec.data.forEach((tr, i) => {
-          plotly.restyle(el, { x: [tr.x], y: [tr.y] }, [i]);
-        });
-        const update: Record<string, unknown> = { height, width };
-        if (el !== heatRef.current) {
-          update.shapes = spec.layout.shapes ?? [];
-          if (xRange) update["xaxis.range"] = xRange;
-        }
-        plotly.relayout(el, update);
+      if (mode === "resize" && drawn.current) {
+        plotly.relayout(el, { height, width });
+        continue;
       }
+      const layout = { ...spec.layout, height, width };
+      plotly.react(el, spec.data, layout, el === heatRef.current ? heatCfg : timeCfg);
     }
     drawn.current = true;
   };
@@ -207,24 +212,14 @@ export function DiagnosticsView() {
   useEffect(() => {
     drawn.current = false;
     paint("react");
-    // Book or loaded histories changed. The pin effect below moves the marker.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plotly, currentAsset, byId]);
-
-  useEffect(() => {
-    if (!drawn.current) {
-      paint("react");
-      return;
-    }
-    paint("restyle");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [charts]);
+  }, [plotly, charts]);
 
   useEffect(() => {
     if (!plotly) return;
     const nodes = [heatRef.current, rzRef.current, stretchRef.current, regimeRef.current];
     const ro = new ResizeObserver(() => {
-      if (drawn.current) paint("restyle");
+      if (drawn.current) paint("resize");
     });
     for (const n of nodes) if (n) ro.observe(n);
     return () => ro.disconnect();
@@ -233,6 +228,10 @@ export function DiagnosticsView() {
 
   const linesRef = useRef(lines);
   linesRef.current = lines;
+
+  useEffect(() => {
+    if (lines.length) setLiveText(lines.join(" "));
+  }, [asOf, lines]);
 
   const step = (dir: number) => {
     const next = Math.min(spine.length - 1, Math.max(0, sliderIndex + dir));
@@ -259,20 +258,6 @@ export function DiagnosticsView() {
   return (
     <article className="reading-page diagnostics-view">
       <div className="diag-controls">
-        <label htmlFor="diag-sleeve">
-          Book{" "}
-          <select
-            id="diag-sleeve"
-            value={currentAsset}
-            onChange={(e) => setCurrentAsset(e.target.value)}
-          >
-            {SLEEVES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="diag-date" htmlFor="diag-date">
           <span>{asOf ? plainDate(asOf) : "Loading"}</span>
           <input
@@ -282,6 +267,9 @@ export function DiagnosticsView() {
             max={Math.max(0, spine.length - 1)}
             value={sliderIndex}
             disabled={spine.length === 0}
+            aria-valuemin={0}
+            aria-valuemax={Math.max(0, spine.length - 1)}
+            aria-valuenow={sliderIndex}
             aria-valuetext={asOf ? plainDate(asOf) : "Loading"}
             onChange={(e) => {
               const d = spine[Number(e.target.value)];
@@ -292,23 +280,71 @@ export function DiagnosticsView() {
         </label>
       </div>
       <div className="diag-board">
-        <section className="diag-col">
+        <section className="diag-col diag-heat-col">
           <h2>Heat</h2>
-          <div ref={heatRef} className="diag-chart" />
+          <div className="diag-heat-frame">
+            <div ref={heatRef} className="diag-chart" />
+          </div>
+          <div className="diag-heat-key">
+            <p>
+              <i style={{ background: "#D0BA9B" }} /> Quiet, under 40
+            </p>
+            <p>
+              <i style={{ background: "#A6764C" }} /> Warming, from 40
+            </p>
+            <p>
+              <i style={{ background: "#6E442C" }} /> Stretched, from 70
+            </p>
+            <p className="diag-heat-key-note">
+              Darker means more heat. Cash at 0 stays the lightest.
+            </p>
+          </div>
         </section>
-        <div className="diag-histories">
-          <section className="diag-pane">
-            <h2>Distance from the path</h2>
-            <div ref={rzRef} className="diag-chart" />
-          </section>
-          <section className="diag-pane">
-            <h2>Fast rise</h2>
-            <div ref={stretchRef} className="diag-chart" />
-          </section>
-          <section className="diag-pane">
-            <h2>Boom and bust</h2>
-            <div ref={regimeRef} className="diag-chart" />
-          </section>
+        <div className="diag-series">
+          <label className="diag-book" htmlFor="diag-sleeve">
+            Book{" "}
+            <select
+              id="diag-sleeve"
+              value={currentAsset}
+              onChange={(e) => setCurrentAsset(e.target.value)}
+            >
+              {BOOKS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.mark} {s.plain}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="diag-histories">
+            <section className="diag-pane">
+              <h2>Distance from the path</h2>
+              <p className="diag-plot-note">
+                The line is how many steps the book sits above or below the path
+                drawn through its own past. The steps are in that book's usual
+                size. Above zero, the book is higher than the path.
+              </p>
+              <div ref={rzRef} className="diag-chart" />
+            </section>
+            <section className="diag-pane">
+              <h2>Fast rise</h2>
+              <p className="diag-plot-note">
+                The solid line is a check for a rise faster than a random walk.
+                The dotted line is the ordinary line on that row, about 1.49.
+                When the solid line is above the dotted line, the check is on.
+              </p>
+              <div ref={stretchRef} className="diag-chart" />
+            </section>
+            <section className="diag-pane">
+              <h2>Boom and bust</h2>
+              <p className="diag-plot-note">
+                Two lines, in percent. Boom is how much this date looks like a
+                boom. Bust is how much it looks like a bust. They describe this
+                date. On this history the state word stays normal even when the
+                percents move.
+              </p>
+              <div ref={regimeRef} className="diag-chart" />
+            </section>
+          </div>
         </div>
         <section className="diag-col diag-read">
           <h2>{book.name}</h2>

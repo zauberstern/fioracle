@@ -3,6 +3,7 @@ import {
   FORBIDDEN_FIELDS,
   assertField,
   buildCharts,
+  heatShade,
   type LayerBundle,
   type SleeveDef,
 } from "./chartSpecs";
@@ -202,5 +203,37 @@ describe("buildCharts", () => {
     const x = built.residualZ.data[0]!.x as string[];
     expect(x.every((d) => d <= "2008-01-01")).toBe(true);
     expect(x).not.toContain("2008-02-01");
+  });
+
+  it("grades heat, steps at 40 and 70, and leaves the time plots untitled", () => {
+    expect(heatShade(0)).toBe("#E1DCCE");
+    expect(heatShade(39)).toBe("#C4AD88");
+    expect(heatShade(40)).toBe("#BD9968");
+    expect(heatShade(69)).toBe("#8E542F");
+    expect(heatShade(70)).toBe("#6E442C");
+    expect(heatShade(100)).toBe("#503427");
+    expect(heatShade(20)).not.toBe(heatShade(45));
+    expect(heatShade(45)).not.toBe(heatShade(80));
+    expect(heatShade(72)).not.toBe(heatShade(95));
+
+    const layers = layersWithJunk();
+    const built = buildCharts({
+      layersByAsset: { SP500_TOTAL_RETURN: layers, US_CASH_RETURN: layers },
+      selectedId: "SP500_TOTAL_RETURN",
+      asOf: "2008-02-01",
+      sleeves,
+    });
+    expect(built.heat.layout.dragmode).toBe(false);
+    expect(built.residualZ.layout.title).toBeUndefined();
+    expect(built.stretch.layout.title).toBeUndefined();
+    expect(built.regime.layout.title).toBeUndefined();
+    const margin = built.residualZ.layout.margin as { t: number };
+    expect(margin.t).toBeLessThanOrEqual(12);
+    const marker = built.heat.data[0]!.marker as {
+      color: string[];
+      line: { width: number[] };
+    };
+    expect(marker.line.width).toEqual([2, 0]);
+    expect(marker.color[1]).toBe("#E1DCCE");
   });
 });
