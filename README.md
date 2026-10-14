@@ -40,30 +40,13 @@ These figures describe the public marks for the date you pin. They are not a for
 
 The jump model and the XGBoost classifier are in [`src/core/regimes.py`](src/core/regimes.py). `rolling_regime_forecasting` in that file refits on a walk-forward window. The point-in-time store is [`src/core/store.py`](src/core/store.py): a macro row is visible on `available_date`, and the store does not lag it a second time. Weights are [`src/core/portfolio.py`](src/core/portfolio.py) for `minvar`, `mv`, and `ew`.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        FIOracle Architecture                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   ┌─────────────────┐    ┌──────────────────┐    ┌────────────────────┐    │
-│   │  LAYER A        │    │  LAYER B         │    │  LAYER C           │    │
-│   │  Data Pipeline  │───▶│  Regime Engine   │───▶│  Portfolio Engine  │    │
-│   └─────────────────┘    └──────────────────┘    └────────────────────┘    │
-│           │                       │                        │                │
-│     Asset Returns          Jump Model +              MVO / MinVar /         │
-│     Macro Features         XGBoost Forecast          Equal Weight           │
-│     Forward-Filled         3-State Regimes           Regime-Conditioned     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
 The published split is train 1965–1994, validation 1995–2007, and test from 2008-01-01 through 2025-11-28. Macros enter on their publication lag. On the store path that lag is `available_date`, applied once. The jump model rolls a 10-year train, a 2-year validation, and a 6-month update. Features are trailing windows.
 
 ### Asset universe (paper freeze)
 
 **18 investable** series (see `config/config.yaml` / `paper/PAPER_EXPERIMENT.md`): cash, US Treasuries (cash through long), US and global aggregate and credit, EM USD aggregate, TIPS and the 5-year inflation swap, global inflation-linked bonds 0–5, Swiss franc, the USD swaption 1Y5Y, and Swiss government 7–15.
 
-**23 excluded** series load for research context and stay out of the optimizer.
+23 other series load for research context and stay out of the optimizer.
 
 ### Macros enabled on that freeze
 
@@ -129,7 +112,7 @@ These rows are the 31 Jul 2026 store run on `fioracle_ds_v2`, 4,506 test days. S
 
 ### Crisis windows
 
-Source: `paper/tables/crisis_subperiods.csv`. GFC (2008-09-01 to 2009-03-31) and Euro (2011-07-01 to 2012-06-30) have 0 days in that file, so they are omitted. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
+Source: `paper/tables/crisis_subperiods.csv`. GFC (2008-09-01 to 2009-03-31) and Euro (2011-07-01 to 2012-06-30) have 0 days in that file, so they are omitted.
 
 | Window | Days | Strategy | Sharpe | Total return | Max drawdown |
 |--------|------|----------|--------|--------------|--------------|
@@ -142,7 +125,7 @@ Source: `paper/tables/crisis_subperiods.csv`. GFC (2008-09-01 to 2009-03-31) and
 
 ### Forecast quality, test split
 
-Source: `paper/tables/forecast_quality.csv`, rows whose path contains `diagnostics/test/`. A blank Brier cell is blank in the file. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
+Source: `paper/tables/forecast_quality.csv`, rows whose path contains `diagnostics/test/`. A blank Brier cell is blank in the file.
 
 | Asset | Brier | Accuracy | Balanced accuracy |
 |-------|-------|----------|-------------------|
@@ -156,7 +139,7 @@ Source: `paper/tables/forecast_quality.csv`, rows whose path contains `diagnosti
 
 ### Probability of backtest overfitting
 
-Source: `paper/tables/pbo.csv`. PBO is 0.0 on 15 paths across 3 strategies. The file marks that path count as under-powered and says not to cite it as proof of no overfitting. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
+Source: `paper/tables/pbo.csv`. PBO is 0.0 on 15 paths across 3 strategies. The file marks that path count as under-powered and says not to cite it as proof of no overfitting.
 
 ### Cumulative wealth, test window
 
@@ -323,7 +306,7 @@ The FI convexity overlay keeps `features.dii.enabled: false` and `vrp_overlay.en
 ```bibtex
 @software{fioracle2025,
   title={FIOracle: Regime-Aware Fixed Income Portfolio Optimization},
-  author={Yadav, Kartik and Förch, Leon and Kachatryan, Edward and Copetti, Nicola and Florentino, Alessandro},
+  author={Yadav, Kartik},
   year={2025},
   url={https://github.com/zauberstern/fioracle}
 }

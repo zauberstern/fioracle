@@ -580,7 +580,7 @@ _FEATURE_TICK_LABELS = {
 
 
 def feature_tick_label(feature_id: str) -> str:
-    """Axis text for a saved importance row. Unknown ids stay as stored."""
+    """Unknown ids stay as stored."""
     return _FEATURE_TICK_LABELS.get(feature_id, feature_id)
 
 

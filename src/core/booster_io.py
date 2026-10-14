@@ -1,4 +1,4 @@
-"""Persist a fitted XGBoost booster and the column order it expects."""
+"""Write one fitted booster and the column order it scores."""
 
 from __future__ import annotations
 

@@ -1,8 +1,4 @@
-"""Copy a finished max-capability run into the static sandbox folder.
-
-Reads the walk-forward checkpoint and the minimum-variance weights.
-Does not fit a model and does not invent a probability.
-"""
+"""Copy a finished run's probabilities and minimum-variance weights into the sandbox folder."""
 
 from __future__ import annotations
 
@@ -90,7 +86,7 @@ def export_bundle(
     max_weight: float,
 ) -> None:
     dest.mkdir(parents=True, exist_ok=True)
-    log_path = dest / "export_log.txt"
+    log_path = run_dir / "sandbox_export.log"
     if not checkpoint_path.exists():
         log_path.write_text(f"No checkpoint at {checkpoint_path}\n")
         return
