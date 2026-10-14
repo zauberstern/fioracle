@@ -70,10 +70,37 @@ function baseLayout(title: string): Record<string, unknown> {
   };
 }
 
-function timeLayout(title: string): Record<string, unknown> {
+function timeLayout(
+  title: string,
+  xRange?: [string, string],
+  pin?: string
+): Record<string, unknown> {
+  const layout = baseLayout(title);
   return {
-    ...baseLayout(title),
-    xaxis: { type: "date", hoverformat: "%d %b %Y" },
+    ...layout,
+    showlegend: false,
+    margin: { t: 12, r: 16, b: 36, l: 44 },
+    xaxis: {
+      type: "date",
+      hoverformat: "%d %b %Y",
+      ...(xRange ? { range: xRange, autorange: false } : {}),
+    },
+    ...(pin
+      ? {
+          shapes: [
+            {
+              type: "line",
+              xref: "x",
+              yref: "paper",
+              x0: pin,
+              x1: pin,
+              y0: 0,
+              y1: 1,
+              line: { color: "#0072B2", width: 1 },
+            },
+          ],
+        }
+      : {}),
   };
 }
 
@@ -115,8 +142,9 @@ export function buildCharts(opts: {
   selectedId: string;
   asOf: string;
   sleeves: SleeveDef[];
+  xRange?: [string, string];
 }): ChartBuild {
-  const { layersByAsset, selectedId, asOf, sleeves } = opts;
+  const { layersByAsset, selectedId, asOf, sleeves, xRange } = opts;
   const pin = asOf.slice(0, 10);
 
   const heatLabels: string[] = [];
@@ -171,7 +199,7 @@ export function buildCharts(opts: {
         line: { color: READING.signal },
       },
     ],
-    layout: timeLayout("Standardised residual"),
+    layout: timeLayout("Standardised residual", xRange, pin),
   };
 
   const stat = series(bsadf, "bsadf_stat");
@@ -219,7 +247,7 @@ export function buildCharts(opts: {
         marker: { color: PALETTE.vermilion, size: 8 },
       },
     ],
-    layout: timeLayout("Stretch and critical value"),
+    layout: timeLayout("Stretch and critical value", xRange, pin),
   };
 
   assertField("boom_probability");
@@ -266,7 +294,7 @@ export function buildCharts(opts: {
       },
     ],
     layout: {
-      ...timeLayout("Boom and bust probabilities"),
+      ...timeLayout("Boom and bust probabilities", xRange, pin),
       yaxis: { title: "Percent", range: [0, 100], zeroline: false },
     },
   };

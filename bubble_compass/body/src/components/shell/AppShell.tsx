@@ -97,7 +97,13 @@ export function AppShell() {
             </nav>
           </header>
         )}
-        <div className="app-shell-body reading-body">
+        <div
+          className={
+            view === "diagnostics"
+              ? "app-shell-body reading-body reading-body-lock"
+              : "app-shell-body reading-body"
+          }
+        >
           {view === "home" ? <WeeklyReading /> : null}
           {view === "closer" ? <CloserView /> : null}
           {view === "then" ? (

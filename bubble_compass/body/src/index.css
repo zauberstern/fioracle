@@ -74,6 +74,12 @@ body,
   overflow: auto;
 }
 
+.reading-body-lock {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .reading-header {
   position: relative;
   z-index: 30;
@@ -1601,11 +1607,25 @@ body,
   max-width: 46rem;
 }
 
+.pitch-body h2 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 18px;
+  font-weight: 500;
+}
+
 .pitch-body p {
   margin: 0 0 1rem;
   font-size: 16px;
   line-height: 1.5;
   color: var(--text-primary);
+}
+
+.pitch-eq {
+  margin: 0 0 1rem;
+  font-family: var(--font-data);
+  font-size: 15px;
+  line-height: 1.4;
+  color: #171a20;
 }
 
 .pitch-actions {
@@ -1713,10 +1733,114 @@ body,
   font-size: 0.95rem;
 }
 
+.diagnostics-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 16px 16px;
+}
+
+.diag-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 8px;
+}
+
+.diag-controls label {
+  font-size: 14px;
+}
+
+.diag-date {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.diag-date input {
+  flex: 1;
+  accent-color: #0072b2;
+}
+
+.diag-date span {
+  font-family: var(--font-data);
+  font-size: 13px;
+  min-width: 7rem;
+}
+
+.diag-board {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 372px) minmax(0, 1fr) minmax(220px, 320px);
+  gap: 12px;
+}
+
+.diag-col {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diag-col h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.diag-histories {
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 8px;
+  min-height: 0;
+}
+
+.diag-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .diagnostics-view .diag-chart {
+  flex: 1;
   width: 100%;
-  min-height: 320px;
-  margin: 1rem 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.diag-read p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.diag-limits {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 960px) {
+  .reading-body-lock {
+    overflow: auto;
+  }
+
+  .diagnostics-view {
+    overflow: visible;
+    height: auto;
+  }
+
+  .diag-board {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .diagnostics-view .diag-chart {
+    min-height: 180px;
+  }
 }
 
 .diagnostics-view .diag-note,
