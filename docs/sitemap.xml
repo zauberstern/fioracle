@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://zauberstern.github.io/fioracle/</loc>
-  </url>
-  <url>
-    <loc>https://zauberstern.github.io/fioracle/manifesto.html</loc>
-  </url>
-  <url>
-    <loc>https://zauberstern.github.io/fioracle/leavebehind.html</loc>
-  </url>
+  <url><loc>https://zauberstern.github.io/fioracle/</loc></url>
+  <url><loc>https://zauberstern.github.io/fioracle/sandbox/</loc></url>
+  <url><loc>https://zauberstern.github.io/fioracle/compass/</loc></url>
+  <url><loc>https://zauberstern.github.io/fioracle/compass/desk/</loc></url>
 </urlset>
