@@ -14,7 +14,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "BBG_US_HIGH_YIELD_TOTAL_RETURN",
@@ -28,7 +28,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "BBG_US_CORPORATE_TOTAL_RETURN",
@@ -42,7 +42,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "BBG_US_TREASURY_TOTAL_RETURN",
@@ -56,7 +56,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "GOLD_TOTAL_RETURN",
@@ -70,7 +70,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "US_CASH_RETURN",
@@ -84,7 +84,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "CDX_HY_5Y_TOTAL_RETURN",
@@ -98,7 +98,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "CDX_IG_5Y_TOTAL_RETURN",
@@ -112,7 +112,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "BBG_GLOBAL_AGG_TOTAL_RETURN",
@@ -126,7 +126,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "BBG_EURO_AGG_CHF_HEDGED_TOTAL_RETURN",
@@ -140,7 +140,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "US_BOND_AGG_TOTAL_RETURN",
@@ -154,7 +154,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "US_TIPS_0_5_TOTAL_RETURN",
@@ -168,7 +168,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "GLOBAL_ILB_0_5_TOTAL_RETURN",
@@ -182,7 +182,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "ISHARES_20Y_TREASURY_TOTAL_RETURN",
@@ -196,7 +196,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "ISHARES_7_10Y_TREASURY_TOTAL_RETURN",
@@ -210,7 +210,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "ISHARES_1_3Y_TREASURY_TOTAL_RETURN",
@@ -224,7 +224,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "ISHARES_SWISS_GOV_7_15_TOTAL_RETURN",
@@ -238,7 +238,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "WTI_TOTAL_RETURN",
@@ -252,7 +252,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "VRP_HARVEST_TOTAL_RETURN",
@@ -266,7 +266,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "CHF_TOTAL_RETURN",
@@ -280,7 +280,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "US_AAA_CORP_BOND_TOTAL_RETURN",
@@ -294,7 +294,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "US_BAA_CORP_BOND_TOTAL_RETURN",
@@ -308,7 +308,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     },
     {
       "asset": "IBOXX_UK_IL_GILT_TOTAL_RETURN",
@@ -322,7 +322,7 @@
         "regime",
         "sentiment"
       ],
-      "n_rows": 234
+      "n_rows": 225
     }
   ]
 }
