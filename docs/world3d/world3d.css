@@ -1,0 +1,10 @@
+.stage { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; position: relative; z-index: 1; }
+.stage h1 { font-size: 1.8rem; font-weight: 600; }
+#note { color: var(--text-dim); min-height: 1.4em; }
+#view { position: relative; border: 1px solid var(--border); background: #07080c; }
+#scene { width: 100%; height: auto; display: block; }
+#path { margin: 12px 0 0; padding-left: 18px; color: var(--text-dim); }
+.legend { display: flex; gap: 18px; color: var(--text-dim); }
+.legend span:nth-child(1) { color: #9aa3ad; }
+.legend span:nth-child(2) { color: #c4a574; }
+.legend span:nth-child(3) { color: #c4843a; }

@@ -190,7 +190,12 @@ def compute_xgb_diagnostics(
                 ax.set_yticks(range(len(feature_names)))
                 ax.set_yticklabels(feature_names[::-1], fontsize=9)
                 ax.set_xlabel('Mean |SHAP value|', fontsize=11)
-                ax.set_title(f'SHAP Feature Importance: {asset_name}', fontsize=14, fontweight='bold')
+                try:
+                    from .labels import get_plot_label
+                    _asset_title = get_plot_label(asset_name)
+                except Exception:
+                    _asset_title = asset_name
+                ax.set_title(f'SHAP Feature Importance: {_asset_title}', fontsize=14, fontweight='bold')
                 plt.tight_layout()
                 plt.savefig(shap_dir / f'{asset_name}_shap_bar.png', dpi=150, bbox_inches='tight')
                 plt.close(fig)
@@ -201,7 +206,12 @@ def compute_xgb_diagnostics(
             try:
                 fig = plt.figure(figsize=(12, 8))
                 shap.summary_plot(plot_shap, X_shap, show=False, max_display=20)
-                plt.title(f'SHAP Summary: {asset_name}', fontsize=14, fontweight='bold')
+                try:
+                    from .labels import get_plot_label
+                    _asset_title = get_plot_label(asset_name)
+                except Exception:
+                    _asset_title = asset_name
+                plt.title(f'SHAP Summary: {_asset_title}', fontsize=14, fontweight='bold')
                 plt.tight_layout()
                 plt.savefig(shap_dir / f'{asset_name}_shap_summary.png', dpi=150, bbox_inches='tight')
                 plt.close(fig)
@@ -543,6 +553,37 @@ def save_diagnostics_summary(
     print(f"  Diagnostics saved to {diag_dir}")
 
 
+_FEATURE_TICK_LABELS = {
+    "avg_return_hl5": "5-day average return",
+    "avg_return_hl10": "10-day average return",
+    "avg_return_hl21": "21-day average return",
+    "log_dd_hl5": "5-day drawdown",
+    "log_dd_hl21": "21-day drawdown",
+    "sortino_hl5": "5-day Sortino",
+    "sortino_hl10": "10-day Sortino",
+    "sortino_hl21": "21-day Sortino",
+    "macro_vix_level_norm": "VIX level",
+    "macro_vix_logdiff_ewma63": "VIX change, 63-day",
+    "macro_gpr_level_norm": "Geopolitical risk level",
+    "macro_gpr_logdiff_ewma21": "Geopolitical risk change, 21-day",
+    "macro_hy_oas_level_norm": "High-yield spread level",
+    "macro_hy_oas_return_ewma21": "High-yield spread change, 21-day",
+    "macro_inflation_level": "Inflation level",
+    "macro_inflation_change_ewma21": "Inflation change, 21-day",
+    "macro_unemployment_level": "Unemployment level",
+    "macro_unemployment_change_ewma21": "Unemployment change, 21-day",
+    "macro_yield_2y_diff_ewma21": "2-year yield change, 21-day",
+    "macro_yield_slope_ewma10": "Yield curve slope, 10-day",
+    "macro_yield_slope_diff_ewma21": "Yield curve slope change, 21-day",
+    "macro_stock_bond_corr_252d": "Stock-bond correlation, 252-day",
+}
+
+
+def feature_tick_label(feature_id: str) -> str:
+    """Axis text for a saved importance row. Unknown ids stay as stored."""
+    return _FEATURE_TICK_LABELS.get(feature_id, feature_id)
+
+
 def plot_feature_importance_comparison(
     all_results: Dict[str, Dict],
     output_dir: Path,
@@ -590,7 +631,7 @@ def plot_feature_importance_comparison(
             colors.append('#2b6cb0')  # Blue for return features
     
     plt.barh(range(len(feats)), imps, color=colors)
-    plt.yticks(range(len(feats)), feats)
+    plt.yticks(range(len(feats)), [feature_tick_label(f) for f in feats])
     plt.xlabel('Average Feature Importance', fontsize=12)
     plt.title('Aggregate Feature Importance Across Assets', fontsize=14, fontweight='bold')
     plt.gca().invert_yaxis()

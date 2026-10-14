@@ -41,28 +41,28 @@ def load_config() -> dict:
     return {}
 
 
+_PLOT_LABEL_IDS = {
+    "US_10Y_GOV_BOND": "US_10Y_GOV_BOND_RETURN",
+    "US_BOND_AGG": "US_BOND_AGG_TOTAL_RETURN",
+    "CHF": "CHF_TOTAL_RETURN",
+    "ISHARES_1_3Y_TREASURY": "ISHARES_1_3Y_TREASURY_TOTAL_RETURN",
+    "ISHARES_7_10Y_TREASURY": "ISHARES_7_10Y_TREASURY_TOTAL_RETURN",
+    "ISHARES_20Y_TREASURY": "ISHARES_20Y_TREASURY_TOTAL_RETURN",
+    "US_TIPS_0_5": "US_TIPS_0_5_TOTAL_RETURN",
+    "BBG_US_HIGH_YIELD": "BBG_US_HIGH_YIELD_TOTAL_RETURN",
+    "GOLD": "GOLD_TOTAL_RETURN",
+}
+
+
 def get_display_name(asset_name: str, config: dict) -> str:
-    """Get display name from config or fallback."""
-    asset_names = config.get('assets', {}).get('display_names', {})
-    macro_names = config.get('macro', {}).get('display_names', {})
-    
-    # Check both asset and macro display names
-    if asset_name in asset_names:
-        return asset_names[asset_name]
-    if asset_name in macro_names:
-        return macro_names[asset_name]
-    
-    # Fallback
-    fallbacks = {
-        'US_CASH_RETURN': 'US T-Bills',
-        'US_10Y_GOV_BOND_RETURN': 'US 10Y Treasury',
-        'US_BOND_AGG_TOTAL_RETURN': 'US Aggregate Bond',
-        'CHF_TOTAL_RETURN': 'Swiss Franc',
-        'US_INFLATION_RATE': 'CPI Inflation',
-        'GPRI': 'Geopolitical Risk',
-        'VIX': 'VIX Index',
-    }
-    return fallbacks.get(asset_name, asset_name.replace('_', ' ').title())
+    """Plot label from SoT short_label (config arg retained for call-site compat)."""
+    del config  # SoT is authoritative for legends
+    series_id = _PLOT_LABEL_IDS.get(asset_name, asset_name)
+    try:
+        from src.core.labels import get_plot_label
+        return get_plot_label(series_id)
+    except Exception:
+        return asset_name.replace("_", " ").title()
 
 
 def load_series_data(
@@ -353,8 +353,14 @@ def create_regime_prediction_timeline(
     # Target assets (keys match feature dictionary format without _RETURN suffix)
     target_assets = [
         'US_10Y_GOV_BOND',
-        'US_BOND_AGG', 
-        'CHF'
+        'US_BOND_AGG',
+        'CHF',
+        'ISHARES_1_3Y_TREASURY',
+        'ISHARES_7_10Y_TREASURY',
+        'ISHARES_20Y_TREASURY',
+        'US_TIPS_0_5',
+        'BBG_US_HIGH_YIELD',
+        'GOLD',
     ]
     
     print("Loading data for regime analysis...")
@@ -490,9 +496,10 @@ def create_regime_prediction_timeline(
             ax.set_yticks([0.25, 0.75])
             ax.set_yticklabels(['XGBoost', 'Jump Model'], fontsize=10)
             
-            ax.set_title(f'{display_name}: Regime Predictions (3-State Model)\n'
-                        'Green=Calm | Yellow=Inflationary | Red=Crisis',
-                        fontsize=14, fontweight='bold', pad=15)
+            ax.set_title(
+                f'{display_name}: regime predictions',
+                fontsize=14, fontweight='bold', pad=15,
+            )
             
             ax.grid(True, alpha=0.3, axis='x')
             

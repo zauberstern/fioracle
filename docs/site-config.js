@@ -10,18 +10,10 @@ window.FIORACLE_SITE = {
     enabled: false,
     plausibleDomain: "",
   },
-  gasEngine: {
-    path: "molecule/index.html",
-    experimentClass: "fioracle_rg_engine_v1",
-    paperLock: "2508.15667",
-    certificates: "unpriced",
-    rlAlgos: ["ppo", "sac", "dqn"],
-    physicals: ["AGSI", "ALSI"],
-  },
   disclaimer:
     "Research software. Not investment advice. Backtests are hypothetical performance.",
   trust: {
-    testFiles: 81,
+    testFiles: 86,
     pitLabel: "PIT",
     gates: 4,
     licenseShort: "MIT",

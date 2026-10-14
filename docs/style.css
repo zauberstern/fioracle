@@ -1,14 +1,14 @@
 :root {
-  --bg: #05070d;
-  --bg-panel: rgba(255,255,255,0.03);
-  --border: rgba(255,255,255,0.08);
+  --bg: #07080c;
+  --bg-panel: #101218;
+  --border: #2a2e38;
   --text: #e8ecf4;
-  --text-dim: #9aa4b8;
-  --calm: #2dd4bf;
-  --inflation: #f5a623;
-  --crisis: #ef4444;
-  --gold: #e9c46a;
-  --radius: 14px;
+  --text-dim: #9aa3ad;
+  --calm: #9aa3ad;
+  --inflation: #c4a574;
+  --crisis: #c4843a;
+  --gold: #c4a574;
+  --radius: 2px;
   font-size: 16px;
 }
 
@@ -30,7 +30,7 @@ body { background: var(--bg); color: var(--text); font-family: "Helvetica Neue",
   position: sticky; top: 0; z-index: 60;
   width: 100%; padding: 8px 16px; text-align: center;
   font-size: 13px; color: var(--text-dim);
-  background: rgba(5,7,13,0.92); border-bottom: 1px solid rgba(233,196,106,0.35);
+  background: #07080c; border-bottom: 1px solid #2a2e38;
 }
 .compliance-banner code { color: var(--crisis); font-size: 0.9em; }
 
@@ -38,8 +38,7 @@ body { background: var(--bg); color: var(--text); font-family: "Helvetica Neue",
   position: sticky; top: 36px; left: 0; right: 0; z-index: 50;
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 40px;
-  backdrop-filter: blur(10px);
-  background: rgba(5,7,13,0.72);
+  background: #07080c;
   border-bottom: 1px solid var(--border);
   gap: 20px;
 }
@@ -58,7 +57,7 @@ body { background: var(--bg); color: var(--text); font-family: "Helvetica Neue",
   .nav-links { display: none; }
   .nav-links.is-open {
     display: flex; flex-direction: column; position: absolute; top: 100%; left: 0; right: 0;
-    background: rgba(5,7,13,0.96); padding: 16px 24px; border-bottom: 1px solid var(--border); gap: 14px;
+    background: #07080c; padding: 16px 24px; border-bottom: 1px solid var(--border); gap: 14px;
   }
 }
 

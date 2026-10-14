@@ -1,0 +1,33 @@
+{
+  "asset_id": "GOLD",
+  "feature_names": [
+    "avg_return_hl5",
+    "avg_return_hl10",
+    "avg_return_hl21",
+    "log_dd_hl5",
+    "log_dd_hl21",
+    "sortino_hl5",
+    "sortino_hl10",
+    "sortino_hl21",
+    "macro_vix_logdiff_ewma63",
+    "macro_vix_level_norm",
+    "macro_gpr_logdiff_ewma21",
+    "macro_gpr_level_norm",
+    "macro_hy_oas_return_ewma21",
+    "macro_hy_oas_level_norm",
+    "macro_unemployment_level",
+    "macro_unemployment_change_ewma21",
+    "macro_inflation_level",
+    "macro_inflation_change_ewma21",
+    "macro_yield_2y_diff_ewma21",
+    "macro_yield_slope_ewma10",
+    "macro_yield_slope_diff_ewma21",
+    "macro_stock_bond_corr_252d"
+  ],
+  "class_map": {
+    "0": 0,
+    "1": 1,
+    "2": 2
+  },
+  "n_estimators": 63
+}

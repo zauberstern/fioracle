@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FIOracle sandbox</title>
+<meta name="robots" content="index,follow" />
+<meta name="theme-color" content="#07080c" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'" />
+<link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="../style.css" />
+<link rel="stylesheet" href="../vendor/uPlot.min.css" />
+<link rel="stylesheet" href="sandbox.css" />
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="compliance-banner" id="gate-banner" role="status">
+  Research software. Not investment advice. No live client capital. Gate status: cleared: false.
+</div>
+<nav class="nav" aria-label="Primary">
+  <a class="nav-logo" href="../index.html">FI<span class="accent">ORACLE</span></a>
+  <div class="nav-links">
+    <a href="../index.html">Home</a>
+    <a href="../compass/">Compass</a>
+    <a href="../manifesto.html">Manifesto</a>
+    <a href="./">Sandbox</a>
+    <a href="../world3d/">Decision</a>
+  </div>
+</nav>
+<main id="main" class="desk">
+  <h1>Saved allocation</h1>
+  <p class="lede">This page reads one finished run. It does not fit a new model. A booster scores a row only when the columns match that instrument's schema, in that order. Return columns can be built from another series. The macro columns are the series the tree was split on.</p>
+  <p id="status" class="status" role="status"></p>
+  <div id="desk-body" hidden>
+    <div id="dates" class="dates" role="group" aria-label="Saved dates"></div>
+    <label class="pick">Instrument
+      <select id="asset"></select>
+    </label>
+    <h2>Probabilities</h2>
+    <table id="probs">
+      <thead><tr><th>Instrument</th><th>Calm</th><th>Inflationary</th><th>Crisis</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h2>Minimum-variance weights</h2>
+    <div id="bars"></div>
+    <table id="weights">
+      <thead><tr><th>Instrument</th><th>Weight</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="weight-sum"></p>
+    <h2>Columns this booster expects</h2>
+    <ol id="schema"></ol>
+    <p>
+      <a id="download-model" href="#">Download booster</a>
+      <a id="download-schema" href="#">Download schema</a>
+    </p>
+    <pre id="snippet" class="snippet"></pre>
+    <p><a id="open-path" href="../world3d/">Show this decision</a></p>
+    <p id="path-note"></p>
+  </div>
+</main>
+<script src="../vendor/uPlot.iife.min.js"></script>
+<script src="sandbox.js"></script>
+</body>
+</html>

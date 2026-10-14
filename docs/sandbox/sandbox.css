@@ -1,0 +1,20 @@
+.desk { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; position: relative; z-index: 1; }
+.desk h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 12px; }
+.lede, .status { color: var(--text-dim); max-width: 62ch; }
+.desk h2 { font-size: 1rem; font-weight: 600; margin: 28px 0 10px; color: var(--text); }
+.dates { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.dates button, .pick select, #open-path {
+  background: #101218; color: var(--text); border: 1px solid var(--border);
+  padding: 6px 10px; font: inherit; cursor: pointer;
+}
+.dates button[aria-pressed="true"] { border-color: #c4a574; color: #c4a574; }
+.pick { display: block; margin: 8px 0 16px; }
+.pick select { margin-left: 8px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-dim); font-weight: 500; }
+#bars { margin: 8px 0 16px; }
+.snippet { white-space: pre-wrap; background: #101218; border: 1px solid var(--border); padding: 12px; color: var(--text-dim); font-size: 0.85rem; }
+#desk-body a { color: #c4a574; margin-right: 16px; }
+#open-path { display: inline-block; background: #101218; color: var(--text); border: 1px solid var(--border); padding: 6px 10px; text-decoration: none; }
+#open-path.is-off { opacity: 0.45; pointer-events: none; }

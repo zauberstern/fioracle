@@ -11,102 +11,34 @@
 <br/>
 
 <p align="center">
-  <em>A machine learning framework for dynamic fixed income portfolio allocation that identifies market regimes and adapts positioning to navigate calm, inflationary, and crisis environments.</em>
-</p>
-
-<p align="center">
-  <a href="#architecture">Architecture</a> •
+  <a href="#what-it-is">What it is</a> •
+  <a href="#meridian">Meridian</a> •
+  <a href="#forecast">Forecast</a> •
+  <a href="#regimes">Regimes</a> •
   <a href="#results">Results</a> •
-  <a href="#usage">Usage</a> •
-  <a href="#config-manual">Config Manual</a> •
-  <a href="#limitations">Limitations</a>
+  <a href="#usage">Usage</a>
 </p>
 
 ---
 
-## Meridian
+<h2 id="what-it-is">What it is</h2>
 
-Meridian reads 23 public books on a date you choose. It keeps the latest row dated on or before that date. Heat runs from 0 to 100. Under 40 the book is Quiet. From 40 it is Warming. From 70 it is Stretched. Cash stays at 0.
-
-On this history the number is the distance above the path the book had been following, plus a fast-rise check. The path adds 12 points per step and stops at 40. The fast-rise check is the Phillips, Shi and Yu (2015) screen. When the check is on, it starts at 25 and adds 8 points for each unit past 1.49. When the check is off, it is 5 points times the reading. A break date can add up to 30 points, and news tone can add up to 15. Both are missing here, so each adds 0. The sum stops at 100.
-
-The published history has 234 rows, from 1 Jan 2008 through 2 Oct 2026. Five dates are marked.
-
-On 1 Jan 2008, Stocks is Quiet at 2.3. On 22 Aug 2008, the row the Lehman week lands on, Stocks is Quiet at 4.4. The same row puts the US inflation-linked book at 100, because its fast-rise reading is far above 1.49 and the score stops at 100. That book is a total return. Consumer prices are not in this history. The other marked rows are 26 Feb 2020, 3 Jan 2022, and 17 Feb 2023. Open them on the page and read the books as of that row.
-
-The reading is published at [zauberstern.github.io/fioracle/compass](https://zauberstern.github.io/fioracle/compass/). Stillmoor is the same history played as a desk, at [zauberstern.github.io/fioracle/compass/desk](https://zauberstern.github.io/fioracle/compass/desk/).
-
-The pages are static files under `docs/compass/`. They do not use Supabase. If you add a database later, put the project URL and the anon key in a gitignored `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, and store the same names as GitHub Actions secrets. Do not give the service role key a `VITE_` name, and do not commit it.
-
-These figures describe the public marks for the date you pin. They are not a forecast or a recommendation.
-
-## Disclaimer
+FIOracle fits a jump model that names three states on a fixed-income book: calm, inflationary, and crisis. An XGBoost classifier then forecasts the next state from today's returns and macros. The long-only weights that follow are minimum variance, mean variance, and equal weight.
 
 **Research software. Not investment advice. Backtests are hypothetical performance.**
 See `paper/compliance/HYPOTHETICAL_PERFORMANCE.md`. Do not post ERoD/Sharpe tables as mass-market performance.
 
-## Public site
+<h2 id="meridian">Meridian</h2>
 
-GitHub Pages (folder `/docs` on `main`): research documentation and manifesto.
-Not a performance advertisement. Gate status on the site is `cleared: false`.
+Meridian reads 23 public books on a date you choose. It keeps the latest row dated on or before that date. Heat runs from 0 to 100. Under 40 the book is Quiet, from 40 it is Warming, and from 70 it is Stretched. Cash stays at 0.
 
-Renewable-gas research cockpit: [`docs/molecule/`](docs/molecule/) (Track G) — pinned GSAP acts, Three.js tubes/particles/shaders, orb guide, mute-default Howler, Simple Mode.
-Timeline JSON is fail-closed (`certificates: unpriced`, `cleared: false` until gates pass).
+The reading is published at [zauberstern.github.io/fioracle/compass](https://zauberstern.github.io/fioracle/compass/). Stillmoor is the same history played as a desk, at [zauberstern.github.io/fioracle/compass/desk](https://zauberstern.github.io/fioracle/compass/desk/).
 
-Replace `contactEmail` in `docs/site-config.js` before treating the briefing CTA as real.
-Formspree stays `PLACEHOLDER` until a real form id is configured. Analytics default off.
+These figures describe the public marks for the date you pin. They are not a forecast or a recommendation.
 
-## Renewable gas engine (research)
+<h2 id="forecast">How a forecast is made</h2>
 
-Dual-track extension on the same PIT lake / SPA culture — **not** a rewrite of the FI spine.
-
-| Piece | Path |
-|---|---|
-| Paper lock (DII/IG) | `authority_corpus/papers/LOCK.json`, `src/core/dii.py`, `src/core/dii_causal.py` |
-| Energy dataset | `config/config.energy_v1.yaml` → `fioracle_energy_v1` |
-| Promote TTF/EUA | `scripts/promote_energy_drop_to_landing.py` |
-| AGSI / ALSI / NAO | `scripts/fetch_agsi_storage.py`, `scripts/fetch_gie_physical.py`, `scripts/fetch_nao.py` |
-| Engine WF | `scripts/run_rg_engine.py` |
-| Storage RL (PPO/SAC/DQN) | `scripts/train_storage_agents.py` |
-| Timeline → Pages | `scripts/export_rg_timeline.py` → `docs/molecule/` |
-| Experiment class | `fioracle_rg_engine_v1` (SPA vs baseline panel; certificates unpriced) |
-
-```bash
-# Promote energy parquet → landings + ingest (separate from fioracle_ds_v3)
-.venv/bin/python scripts/promote_energy_drop_to_landing.py
-# Live AGSI/ALSI (needs GIE_AGSI_API_KEY in .env); use --fixture-fallback only for CI/offline
-.venv/bin/python scripts/fetch_agsi_storage.py --start 2011-01-01
-.venv/bin/python scripts/fetch_gie_physical.py --start 2012-01-01
-.venv/bin/python scripts/fetch_nao.py
-.venv/bin/python scripts/ingest_to_lake.py --config config/config.yaml \
-  --override config/config.energy_v1.yaml --build-dataset fioracle_energy_v1
-
-# Multi-algo storage + outer walk-forward + timeline cockpit
-.venv/bin/python scripts/train_storage_agents.py --algos ppo,sac,dqn --timesteps 40000
-.venv/bin/python scripts/run_rg_engine.py
-.venv/bin/python scripts/export_rg_timeline.py
-```
-
-FI convexity overlay keeps `features.dii.enabled: false` and `vrp_overlay.enabled: false`.
-Do not claim SPA alpha on the FI book from this track.
-
-## Why FIOracle vs Qlib / backtrader / vectorbt / mlfinlab
-
-FIOracle is **not** a general-purpose backtester. The wedge is:
-
-- Point-in-time lake + `available_date` lag contract
-- Jump Model + XGBoost FI Regime Radar with embargoed training
-- Publication-grade SPA / PBO / trial ledger discipline
-
-Honest limitation: under the paper freeze, FI allocation SPA vs Agg / 60-40 is a published **null**. Convexity work (ERoD, conformal cash floor, optional VRP) lives in `config/config.convexity.yaml` and does not retune freeze gamma to fish Sharpe.
-
-## Overview
-
-FIOracle is a point-in-time Jump Model plus XGBoost regime system for fixed income
-**and** a crisis-convexity research overlay with pre-registered gates -- **but** the
-published FI allocation SPA versus Agg / 60-40 is a null, and public pages must not show
-hypothetical ERoD/Sharpe -- **therefore** the product thesis is drawdown control and
-Radar auditability, not alpha marketing.
+The jump model and the XGBoost classifier are in [`src/core/regimes.py`](src/core/regimes.py). `rolling_regime_forecasting` in that file refits on a walk-forward window. The point-in-time store is [`src/core/store.py`](src/core/store.py): a macro row is visible on `available_date`, and the store does not lag it a second time. Weights are [`src/core/portfolio.py`](src/core/portfolio.py) for `minvar`, `mv`, and `ew`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -125,84 +57,69 @@ Radar auditability, not alpha marketing.
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Asset Universe (paper freeze)
+The published split is train 1965–1994, validation 1995–2007, and test from 2008-01-01 through 2025-11-28. Macros enter on their publication lag. On the store path that lag is `available_date`, applied once. The jump model rolls a 10-year train, a 2-year validation, and a 6-month update. Features are trailing windows.
 
-**18 investable** series (see `config/config.yaml` / `paper/PAPER_EXPERIMENT.md`): cash, US Treasuries (cash–long), US/Global agg & credit, EM USD agg, TIPS & 5Y inflation swap, Global ILB 0–5, CHF, USD swaption 1Y5Y, Swiss gov 7–15.
+### Asset universe (paper freeze)
 
-**23 excluded** series (loaded for research context only; not optimized into): Gold, WTI, additional IBOXX/CDX/inflation-swap tenors, etc. Crisis “hedge” names that remain excluded are not live hedges.
+**18 investable** series (see `config/config.yaml` / `paper/PAPER_EXPERIMENT.md`): cash, US Treasuries (cash through long), US and global aggregate and credit, EM USD aggregate, TIPS and the 5-year inflation swap, global inflation-linked bonds 0–5, Swiss franc, the USD swaption 1Y5Y, and Swiss government 7–15.
 
-### Macro Indicators (enabled)
+**23 excluded** series load for research context and stay out of the optimizer.
 
-- **VIX**, **GPRI**, **US Inflation Rate**, **US High Yield OAS**, **US Unemployment Rate**
-- Disabled at load: Debt-to-GDP, EPU, GDP growth, M2 velocity
+### Macros enabled on that freeze
 
----
+VIX, geopolitical risk, US inflation, US high-yield OAS, and US unemployment. Debt-to-GDP, economic policy uncertainty, GDP growth, and M2 velocity are off at load.
 
-<h2 id="architecture">Architecture Deep Dive</h2>
+<h2 id="regimes">Regime pictures</h2>
 
-### 1. Jump Model (Unsupervised Regime Detection)
+Each chart is one book from the 31 Jul 2026 run. The top band is the jump model. The bottom band is the XGBoost forecast. Calm, inflationary, and crisis are in the legend.
 
-The foundation of regime identification uses a **Jump Model** (L1-regularized Markov-switching model) that partitions historical returns into three states:
+Swiss franc.
 
-- **Calm (State 0)**: Low volatility, positive expected returns
-- **Inflationary (State 1)**: Elevated uncertainty, mixed returns
-- **Crisis (State 2)**: High volatility, negative expected returns
+![Swiss franc regime timeline](output/max_cap/figures/historical/regime_timeline_CHF.png)
 
-The regularization parameter λ controls regime persistence vs. responsiveness, tuned via time-series cross-validation on the training set.
+US aggregate bond.
 
-### 2. XGBoost Regime Forecaster (Supervised Learning)
+![US aggregate bond regime timeline](output/max_cap/figures/historical/regime_timeline_US_BOND_AGG.png)
 
-A gradient-boosted classifier predicts tomorrow's regime using today's features:
+US 10-year Treasury.
 
-**Defenses Against Overfitting:**
-- `max_depth=3`, `subsample=0.7`, `colsample_bytree=0.7`
-- `early_stopping_rounds` and time-series CV (`cv_folds=3`)
-- Hyperparameter tuning on validation / walk-forward windows only
+![US 10-year Treasury regime timeline](output/max_cap/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
 
-**Defenses Against Look-Ahead Bias:**
-- **Strict temporal separation**: Train 1965–1994, Validation 1995–2007, Test 2008–2025-11-28
-- **Publication lag modeling**: macros lagged by reporting delays (e.g. CPI 15d, VIX 1d); store path applies lag once via `available_date`
-- **Walk-forward architecture**: JM rolling 10y train / 2y val / 6mo update
-- **Causal features only**: trailing windows; no centered ops
+1–3 year Treasury.
 
-**Historical Regime Detection**
+![1-3 year Treasury regime timeline](output/max_cap/figures/historical/regime_timeline_ISHARES_1_3Y_TREASURY.png)
 
-*CHF acts as a flight-to-quality asset—crisis regimes align with periods when investors seek Swiss Franc safety.*
+7–10 year Treasury.
 
-![CHF Regime Timeline](output/max_cap/figures/historical/regime_timeline_CHF.png)
+![7-10 year Treasury regime timeline](output/max_cap/figures/historical/regime_timeline_ISHARES_7_10Y_TREASURY.png)
 
-*US Treasuries show regime shifts during rate cycles—crisis periods match flight-to-quality rallies and rate shock selloffs.*
+20-year and longer Treasury.
 
-![US 10Y Treasury Regime Timeline](output/max_cap/figures/historical/regime_timeline_US_10Y_GOV_BOND.png)
+![20-year Treasury regime timeline](output/max_cap/figures/historical/regime_timeline_ISHARES_20Y_TREASURY.png)
 
-**Feature Importance**
+US inflation-linked, 0–5 years. This series is a total return.
 
-*Volatility (VIX) dominates regime prediction—market stress signals are the strongest leading indicator of regime transitions.*
+![US TIPS regime timeline](output/max_cap/figures/historical/regime_timeline_US_TIPS_0_5.png)
 
-![Feature Importance](output/max_cap/figures/test/xgb_diagnostics/aggregate_feature_importance.png)
+US high yield.
 
-### 3. Portfolio Optimization
+![US high yield regime timeline](output/max_cap/figures/historical/regime_timeline_BBG_US_HIGH_YIELD.png)
 
-Three strategies execute regime-conditioned allocations:
+Gold. This series is a total return.
 
-| Strategy | Objective | Risk Profile |
-|----------|-----------|--------------|
-| **MinVar** | Minimize portfolio variance | Conservative |
-| **MVO** | Maximize Sharpe (risk-adjusted returns) | Balanced |
-| **EW** | Equal-weight bullish assets | Aggressive |
+![Gold regime timeline](output/max_cap/figures/historical/regime_timeline_GOLD.png)
 
-**Regime-Specific Behavior:**
-- **Crisis**: Rotate toward cash / Treasuries / CHF (investable hedges only)
-- **Inflationary**: Favor TIPS / inflation swaps; shorten duration
-- **Calm**: Diversify across credit, rates, and alternatives in the investable set
+### Feature importance
 
----
+The bars are the average importance across assets on the test split, taken from `output/max_cap/diagnostics/test/xgb_diagnostics.json`. The axis names are labels. The bar lengths are the saved numbers. The tallest bar is the 21-day change in unemployment. The next is the 21-day change in inflation.
+
+![Feature importance](output/max_cap/figures/test/xgb_diagnostics/aggregate_feature_importance.png)
 
 <h2 id="results">Results</h2>
 
 ### Out-of-sample test window
 
-These rows are the 31 Jul 2026 store run on `fioracle_ds_v2`, 4,506 test days. Source: `paper/tables/headline_oos.csv`. Total return is the change over that window, not an annual rate. The FI allocation SPA versus Agg / 60-40 is still a null, and the gate remains `cleared: false`.
+These rows are the 31 Jul 2026 store run on `fioracle_ds_v2`, 4,506 test days. Source: `paper/tables/headline_oos.csv`. Total return is the change over that window, not an annual rate. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
 
 | Metric | MinVar | MVO | EW |
 |--------|--------|-----|-----|
@@ -210,31 +127,94 @@ These rows are the 31 Jul 2026 store run on `fioracle_ds_v2`, 4,506 test days. S
 | **Total return** | 15.0% | 56.5% | 93.3% |
 | **Max drawdown** | −4.8% | −11.2% | −15.3% |
 
-Parent method paper (not FIOracle): [`paper.pdf`](paper.pdf) = Shu, Yu & Mulvey (2024).
+### Crisis windows
 
-### Cumulative Wealth Growth
+Source: `paper/tables/crisis_subperiods.csv`. GFC (2008-09-01 to 2009-03-31) and Euro (2011-07-01 to 2012-06-30) have 0 days in that file, so they are omitted. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
 
-![Cumulative Returns](output/max_cap/figures/test/ew/cumulative_returns.png)
+| Window | Days | Strategy | Sharpe | Total return | Max drawdown |
+|--------|------|----------|--------|--------------|--------------|
+| COVID, 15 Feb 2020 to 30 Apr 2020 | 43 | MinVar | −0.91 | −1.5% | −3.2% |
+| COVID, 15 Feb 2020 to 30 Apr 2020 | 43 | MVO | −1.57 | −10.8% | −18.5% |
+| COVID, 15 Feb 2020 to 30 Apr 2020 | 43 | EW | −0.02 | −0.4% | −5.4% |
+| 2022 rates, 1 Jan 2022 to 31 Dec 2022 | 209 | MinVar | 1.14 | 3.0% | −1.8% |
+| 2022 rates, 1 Jan 2022 to 31 Dec 2022 | 209 | MVO | 1.70 | 10.2% | −3.0% |
+| 2022 rates, 1 Jan 2022 to 31 Dec 2022 | 209 | EW | 0.66 | 2.2% | −3.0% |
 
-### Drawdown Analysis
+### Forecast quality, test split
 
-![Drawdown](output/max_cap/figures/test/ew/drawdown.png)
+Source: `paper/tables/forecast_quality.csv`, rows whose path contains `diagnostics/test/`. A blank Brier cell is blank in the file. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
 
-### Dynamic Allocation
+| Asset | Brier | Accuracy | Balanced accuracy |
+|-------|-------|----------|-------------------|
+| US cash |  | 0.999 | 0.500 |
+| US 10-year | 0.263 | 0.646 | 0.476 |
+| US Treasury | 0.536 | 0.196 | 0.333 |
+| US aggregate | 0.666 | 0.001 | 0.333 |
+| US corporate | 0.145 | 0.890 | 0.624 |
+| US high yield | 0.197 | 0.766 | 0.876 |
+| Gold | 0.263 | 0.649 | 0.503 |
 
-![Allocation Timeline](output/max_cap/figures/test/ew/allocation_timeline.png)
+### Probability of backtest overfitting
 
-### Rolling Sharpe Ratio
+Source: `paper/tables/pbo.csv`. PBO is 0.0 on 15 paths across 3 strategies. The file marks that path count as under-powered and says not to cite it as proof of no overfitting. The FI allocation SPA versus Agg / 60-40 is a null, and the gate is `cleared: false`.
 
-![Rolling Sharpe](output/max_cap/figures/test/ew/rolling_sharpe.png)
+### Cumulative wealth, test window
 
-### Monthly Returns Heatmap
+Equal weight.
 
-![Monthly Returns](output/max_cap/figures/test/ew/monthly_heatmap.png)
+![Equal weight cumulative returns](output/max_cap/figures/test/ew/cumulative_returns.png)
+
+Minimum variance.
+
+![Minimum variance cumulative returns](output/max_cap/figures/test/minvar/cumulative_returns.png)
+
+Mean variance.
+
+![Mean variance cumulative returns](output/max_cap/figures/test/mv/cumulative_returns.png)
+
+### Drawdown, test window
+
+Equal weight.
+
+![Equal weight drawdown](output/max_cap/figures/test/ew/drawdown.png)
+
+Minimum variance.
+
+![Minimum variance drawdown](output/max_cap/figures/test/minvar/drawdown.png)
+
+Mean variance.
+
+![Mean variance drawdown](output/max_cap/figures/test/mv/drawdown.png)
+
+### Allocation over the test window
+
+Equal weight.
+
+![Equal weight allocation](output/max_cap/figures/test/ew/allocation_timeline.png)
+
+Minimum variance.
+
+![Minimum variance allocation](output/max_cap/figures/test/minvar/allocation_timeline.png)
+
+### Rolling Sharpe, test window
+
+Equal weight.
+
+![Equal weight rolling Sharpe](output/max_cap/figures/test/ew/rolling_sharpe.png)
+
+Minimum variance.
+
+![Minimum variance rolling Sharpe](output/max_cap/figures/test/minvar/rolling_sharpe.png)
+
+Mean variance.
+
+![Mean variance rolling Sharpe](output/max_cap/figures/test/mv/rolling_sharpe.png)
 
 ---
 
-<h2 id="usage">Usage Guide</h2>
+<h2 id="usage">Usage</h2>
+
+GitHub Pages serves the folder `/docs` on `main`. The gate on that site is `cleared: false`. Replace `contactEmail` in `docs/site-config.js` before treating the briefing link as a real inbox. Formspree stays `PLACEHOLDER` until a form id is set. Analytics default off.
 
 ### Installation
 
@@ -252,7 +232,7 @@ source .venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
-### Quick Start
+### Quick start
 
 ```bash
 # Run full pipeline (quick mode for testing)
@@ -262,56 +242,41 @@ python main.py --quick
 python main.py
 ```
 
-### Adding New Assets
+### Adding a series
 
-1. Place CSV file in `asset_universe/` with columns: `Date`, `Value` (or similar)
-2. Add filename (without `.csv`) to `config/config.yaml` under `assets.investable`
-3. Run pipeline—the system auto-detects column formats
+1. Place a CSV in `asset_universe/` with columns `Date` and `Value` (or a close column the loader already accepts).
+2. Add the filename without `.csv` to `assets.investable` in `config/config.yaml`.
+3. Run the pipeline. It detects the column layout from the file.
 
-### Output Structure
+### Output layout
 
 ```
 output/
 ├── figures/
 │   ├── test/
-│   │   ├── mv/                    # Mean-Variance strategy plots
-│   │   ├── minvar/                # Minimum Variance plots
-│   │   ├── ew/                    # Equal Weight plots
-│   │   ├── vix_analysis/          # VIX effectiveness analysis
-│   │   ├── supply_shock_analysis/ # 2018-2022 period analysis
-│   │   └── advanced_analytics/    # Fat-tail and statistical tests
-│   ├── historical/                # Long-term time series
-│   └── regime_analysis/           # Macro indicator timelines
+│   │   ├── mv/
+│   │   ├── minvar/
+│   │   ├── ew/
+│   │   └── xgb_diagnostics/
+│   └── historical/
 ├── results/
-│   ├── pipeline_summary.json      # Aggregate results
+│   ├── pipeline_summary.json
 │   └── test/
-│       ├── strategy_comparison.json
-│       └── {strategy}/benchmark_comparison.csv
-└── regime_statistics/             # Regime distributions
+└── models/
 ```
 
----
+### Config keys (paper freeze)
 
-<h2 id="config-manual">Configuration Manual</h2>
+All settings live in `config/config.yaml`. Trust that file over this page if a number disagrees.
 
-All settings live in `config/config.yaml`. Key sections:
-
-| Section | What It Controls |
+| Section | What it controls |
 |---------|------------------|
-| `data` | Train/val/test date splits, data directories |
-| `assets` | Which assets to trade, categories, display names |
-| `macro` | Enabled macro indicators and smoothing params |
-| `macro_lags` | Publication delays to prevent look-ahead bias |
-| `regimes` | Jump Model λ, XGBoost hyperparameters, state count |
-| `portfolio` | Risk aversion, max weights, transaction costs |
-
-### Adding a New Asset
-
-1. Drop `MY_ASSET.csv` into `asset_universe/`
-2. Add `MY_ASSET` to `assets.investable` in config
-3. Run the pipeline
-
-### Key Parameters (paper freeze)
+| `data` | Train, validation, and test dates, and the store dataset |
+| `assets` | Investable series and categories |
+| `macro` | Which macros load |
+| `macro_lags` | Publication delays |
+| `regimes` | Jump-model lambda, XGBoost depth, state count |
+| `portfolio` | Risk aversion, max weight, costs |
 
 ```yaml
 data:
@@ -319,7 +284,7 @@ data:
   train_end: 1994-12-31
   val_end: 2007-12-31
   test_start: 2008-01-01
-  backend: store             # after Phase 1 cutover
+  backend: store
   dataset_id: fioracle_ds_v2
 
 regimes:
@@ -338,28 +303,22 @@ portfolio:
     enabled: false
 ```
 
-### Quick Recipes
-
-| Goal | Changes |
+| Goal | Change |
 |------|--------|
-| **Conservative** | `gamma_risk: 12`, `max_weight: 0.15` |
-| **Aggressive** | `gamma_risk: 5`, `max_weight: 0.25` |
-| **Fast dev runs** | `python main.py --quick`, `tune_hyperparameters: false` |
+| Conservative | `gamma_risk: 12`, `max_weight: 0.15` |
+| Aggressive | `gamma_risk: 5`, `max_weight: 0.25` |
+| Fast local run | `python main.py --quick` |
 
----
+The FI convexity overlay keeps `features.dii.enabled: false` and `vrp_overlay.enabled: false`.
 
-<h2 id="limitations">Limitations</h2>
+### Limitations
 
-- **Regime lag**: Crisis signals may arrive 1–3 days after drawdowns begin
-- **Long-only**: No shorting; defense = rotate to cash/safe havens
-- **USD only**: FX hedging not modeled
-- **Fixed costs**: Assumes 5 bps; real spreads vary by instrument
+- A crisis label can print one to three days after the drawdown has started.
+- The book is long-only. Defense is a rotation into cash and the investable havens.
+- The book is in USD. FX hedging is not in the optimizer.
+- Costs are a flat 5 basis points. Quoted spreads differ by instrument.
 
----
-
-## Citation
-
-If you use FIOracle in your research, please cite:
+### Citation
 
 ```bibtex
 @software{fioracle2025,
@@ -370,14 +329,8 @@ If you use FIOracle in your research, please cite:
 }
 ```
 
-### Related Work (parent paper)
+Shu, Yu, and Mulvey (2024) is the method source: *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*, Annals of Operations Research, [DOI 10.1007/s10479-024-06266-0](https://doi.org/10.1007/s10479-024-06266-0), [arXiv:2406.09578](https://arxiv.org/abs/2406.09578). The local copy is [`paper.pdf`](paper.pdf). See `paper/refs/shu_yu_mulvey_2024.bib`.
 
-Shu, Yu & Mulvey (2024), *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*, Annals of Operations Research, [DOI 10.1007/s10479-024-06266-0](https://doi.org/10.1007/s10479-024-06266-0), [arXiv:2406.09578](https://arxiv.org/abs/2406.09578). Local `paper.pdf` is this parent paper only. See `paper/refs/shu_yu_mulvey_2024.bib`.
+### License
 
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file.

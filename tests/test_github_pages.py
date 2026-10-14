@@ -37,7 +37,7 @@ def _docs_text_files() -> list[Path]:
             # Research timeline / Compass tape JSON is a data feed, not marketing copy
             if "data" in path.parts and path.suffix == ".json":
                 continue
-            # Built Bubble Compass bundles contain numeric layer values; marketing
+            # Built Meridian bundles contain numeric layer values; marketing
             # pages under docs/*.html remain the performance-number gate.
             if "compass" in path.parts and path.suffix in {".js", ".css", ".map"}:
                 continue
@@ -166,7 +166,10 @@ def test_no_root_index_html():
 
 
 def test_no_cdn_scripts():
-    for path in list(DOCS.glob("*.html")) + list((DOCS / "molecule").glob("*.html")):
+    pages = list(DOCS.glob("*.html"))
+    pages += list((DOCS / "sandbox").glob("*.html"))
+    pages += list((DOCS / "world3d").glob("*.html"))
+    for path in pages:
         text = path.read_text(encoding="utf-8")
         for banned in ("jsdelivr", "cdnjs", "unpkg.com"):
             assert banned not in text, f"{path} contains {banned}"
@@ -196,41 +199,10 @@ def test_vendor_three_gsap_present():
 
 
 def test_csp_meta_present():
-    for name in ("index.html", "manifesto.html", "molecule/index.html"):
+    for name in ("index.html", "manifesto.html", "sandbox/index.html", "world3d/index.html"):
         text = (DOCS / name).read_text(encoding="utf-8")
         assert "Content-Security-Policy" in text
         assert "script-src 'self'" in text
-
-
-def test_molecule_page_fail_closed():
-    text = (DOCS / "molecule" / "index.html").read_text(encoding="utf-8")
-    assert "Not investment advice" in text
-    assert "unpriced" in text.lower()
-    assert "cleared: false" in text
-    assert "Simple Mode" in text
-    assert "vendor/three.min.js" in text
-    assert "vendor/gsap.min.js" in text
-    assert "vendor/howler.min.js" in text
-    assert "js/scenes.js" in text
-    assert "jsdelivr" not in text
-    assert "media-src 'self'" in text
-    assert (DOCS / "molecule" / "app.js").is_file()
-    css = (DOCS / "molecule" / "style.css").read_text(encoding="utf-8")
-    assert "prefers-reduced-motion" in css
-    assert (DOCS / "molecule" / "assets" / "ambient_hum.wav").is_file()
-    assert (DOCS / "data" / "network_topology.json").is_file()
-
-
-def test_molecule_app_has_dual_equity_and_waterfall():
-    js = (DOCS / "molecule" / "app.js").read_text(encoding="utf-8")
-    assert "cum_pnl_rl" in js
-    assert "cum_pnl_ri" in js
-    assert "waterfall" in js
-    assert "ScrollTrigger" in js
-    scenes = (DOCS / "molecule" / "js" / "scenes.js").read_text(encoding="utf-8")
-    assert "CatmullRomCurve3" in scenes
-    assert "TubeGeometry" in scenes
-    assert (DOCS / "molecule" / "js" / "orb.js").is_file()
 
 
 def test_a11y_contract():
@@ -292,3 +264,41 @@ def test_compass_pages_product_present():
     assert "/fioracle/compass/" in built
     desk = (compass / "desk" / "index.html").read_text(encoding="utf-8")
     assert "/fioracle/compass/desk/" in desk
+
+
+def _hashed_asset_refs(html: str) -> list[str]:
+    """Collect relative hashed JS/CSS paths named in an index.html."""
+    refs: list[str] = []
+    for m in re.finditer(
+        r"""(?:src|href)=["']([^"']+\.(?:js|css))["']""",
+        html,
+        re.I,
+    ):
+        ref = m.group(1)
+        if ref.startswith("http") or ref.startswith("//"):
+            continue
+        refs.append(ref)
+    return refs
+
+
+def test_compass_hashed_assets_exist_and_paper_css():
+    """Hashed bundles named in compass/desk index.html exist; paper tint present."""
+    compass = DOCS / "compass"
+    for rel_index in ("index.html", "desk/index.html"):
+        index_path = compass / rel_index
+        html = index_path.read_text(encoding="utf-8")
+        base = index_path.parent
+        refs = _hashed_asset_refs(html)
+        assert refs, f"no hashed assets in {rel_index}"
+        for ref in refs:
+            # Strip leading ./ or absolute pages base to a file under the index dir.
+            name = ref.split("/")[-1]
+            candidates = list(base.rglob(name))
+            assert candidates, f"missing asset {ref} for {rel_index}"
+
+    css_files = list((compass / "assets").glob("*.css")) if (compass / "assets").is_dir() else []
+    css_files += list(compass.glob("assets/*.css"))
+    # Also desk may nest CSS under desk/assets
+    css_files += list((compass / "desk").rglob("*.css"))
+    paper = [p for p in css_files if "#f6f5f1" in p.read_text(encoding="utf-8", errors="replace")]
+    assert paper, "compass CSS should contain paper tint #f6f5f1"
