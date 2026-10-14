@@ -17,7 +17,7 @@ export function storyLead(
 
 export function stretchHeadline(bubbleFlag: boolean, stat: number, cv: number): string {
   if (bubbleFlag) {
-    return `Past the crack line (stat ${stat.toFixed(2)} above ${cv.toFixed(2)})`;
+    return `The check is on (stat ${stat.toFixed(2)} above ${cv.toFixed(2)})`;
   }
-  return `Under the crack line (stat ${stat.toFixed(2)} vs ${cv.toFixed(2)})`;
+  return `The check is off (stat ${stat.toFixed(2)} vs ${cv.toFixed(2)})`;
 }

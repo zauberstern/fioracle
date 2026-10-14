@@ -11,7 +11,7 @@ export type GlossaryEntry = {
 export const glossary = {
   bubbleScore: {
     label: "Heat",
-    tech: "Heat runs from 0 to 100. It uses upside residual stretch, the stretch test against its crack line, LPPLS confidence when that package exists, and headline tone when headlines exist.",
+    tech: "Heat runs from 0 to 100. It adds distance above the book's path and a fast-rise check, and it stops at 100.",
   },
   heatLow: {
     label: "Quiet",
@@ -42,7 +42,7 @@ export const glossary = {
     tech: "Regime is bust. Crash-window and downside features lead.",
   },
   stretchTest: {
-    label: "Running hot",
+    label: "Fast rise",
     tech: "PSY BSADF compares the explosive-growth statistic with a critical value under a random-walk null.",
   },
   crashTiming: {

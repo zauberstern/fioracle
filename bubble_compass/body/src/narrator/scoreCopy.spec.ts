@@ -145,8 +145,8 @@ describe("book marks and spine", () => {
   });
 
   it("counts the loaded tape with plain dates", () => {
-    expect(spineSentence(23, 234, "2008-01-01", "2026-10-02")).toBe(
-      "This history has 23 books and 234 rows, from 1 Jan 2008 through 2 Oct 2026."
+    expect(spineSentence(23, 225, "2008-01-01", "2026-01-12")).toBe(
+      "From 1 Jan 2008 through 12 Jan 2026, this history has 23 books and 225 rows."
     );
   });
 
@@ -310,7 +310,7 @@ describe("playChangeSentence", () => {
 });
 
 describe("machinery", () => {
-  it("states the weights and the Phillips screen without a dash", () => {
+  it("states the weights without a dash", () => {
     const text = MACHINERY.join(" ");
     expect(text).toMatch(/12 points per unit/);
     expect(text).toMatch(/stops at 40/);
@@ -318,8 +318,8 @@ describe("machinery", () => {
     expect(text).toMatch(/1\.49/);
     expect(text).toMatch(/30 points/);
     expect(text).toMatch(/15 points/);
-    expect(text).toMatch(/Phillips, Shi and Yu \(2015\)/);
     expect(text).toMatch(/21 business days/);
+    expect(text).not.toMatch(/Phillips/);
     expect(text).not.toMatch(/\u2014/);
     expect(text).not.toMatch(/Sharpe|ERoD/);
   });

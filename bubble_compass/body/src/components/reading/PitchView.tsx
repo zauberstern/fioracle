@@ -1,4 +1,14 @@
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import { PITCH_BLOCKS } from "../../narrator/pitchCopy";
+
+function Equation({ tex }: { tex: string }) {
+  const html = katex.renderToString(tex, {
+    displayMode: true,
+    throwOnError: false,
+  });
+  return <div className="pitch-eq" dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 export function PitchView() {
   return (
@@ -10,11 +20,7 @@ export function PitchView() {
             return <h2 key={block.text}>{block.text}</h2>;
           }
           if (block.kind === "eq") {
-            return (
-              <p key={block.text} className="pitch-eq">
-                {block.text}
-              </p>
-            );
+            return <Equation key={block.text} tex={block.text} />;
           }
           return <p key={block.text}>{block.text}</p>;
         })}

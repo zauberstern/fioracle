@@ -29,7 +29,7 @@ export const MACHINERY: readonly string[] = [
   "The first part is how many steps the book sits above the path it had been following. That distance adds 12 points per unit and this part stops at 40.",
   "The second part asks whether the rise is speeding up. When the fast-rise check is on, that part starts at 25 and adds 8 points for each unit past the ordinary line, 1.49.",
   "A date for a break can add 30 points. News tone can add 15 points times how fast that tone is changing. On this history both are missing, so each adds 0.",
-  "The fast-rise check is the Phillips, Shi and Yu (2015) screen. A new row arrives about every 21 business days.",
+  "A new row arrives about every 21 business days. The fast-rise check is on when the reading is past the ordinary line.",
 ];
 
 function points(n: number): string {
@@ -60,7 +60,7 @@ export function driverSentence(tip: TipLayers): string {
   const flag = tip.bubbleFlag ? "on" : "off";
   const stretch =
     parts.bsadf > 100
-      ? `The climb is far faster than an ordinary rise. An ordinary rise stays near ${num(cv)}, and this reading is ${plainReading(tip.bsadfStat ?? 0)}, so the score stops at 100.`
+      ? `An ordinary rise stays near ${num(cv)}, and this reading is ${plainReading(tip.bsadfStat ?? 0)}, so the score stops at 100.`
       : `The fast-rise reading is ${plainReading(tip.bsadfStat ?? 0)}, against an ordinary line of ${num(cv)}. The check is ${flag}, which adds ${points(parts.bsadf)} points.`;
   let idle = "";
   if (tip.lpplsUnavailable && tip.sentimentUnavailable) {
@@ -213,7 +213,7 @@ export function spineSentence(
   firstIso: string,
   lastIso: string
 ): string {
-  return `This history has ${bookCount} books and ${rowCount} rows, from ${plainDate(firstIso)} through ${plainDate(lastIso)}.`;
+  return `From ${plainDate(firstIso)} through ${plainDate(lastIso)}, this history has ${bookCount} books and ${rowCount} rows.`;
 }
 
 export function playChangeSentence(args: {
@@ -245,7 +245,7 @@ export function padSentence(returns: Array<number | null>): string | null {
     (r): r is number => r != null && Number.isFinite(r)
   );
   if (nums.length === 0 || nums.some((r) => r !== 0)) return null;
-  return "Every loaded book has a return of 0 on this row. Where the row repeats an earlier print, that zero is a placeholder.";
+  return "On this row, every loaded book has a return of 0. Where the row repeats an earlier print, that zero is a placeholder.";
 }
 
 function finiteReturn(row: Record<string, unknown> | null): number | null {

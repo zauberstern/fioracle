@@ -1,4 +1,4 @@
-# Bubble Compass
+# Meridian
 
 Immersive 3D bubble detection: DLinear terrain, PSY obelisks, LPPLS rifts, FinBERT shimmer, RL crowds.
 

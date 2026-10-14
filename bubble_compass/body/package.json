@@ -24,6 +24,7 @@
     "@three.ez/instanced-mesh": "^0.3.0",
     "ecctrl": "^1.0.97",
     "gsap": "^3.12.5",
+    "katex": "^0.19.0",
     "lightweight-charts": "^5.2.0",
     "luxon": "^3.7.2",
     "plotly.js-dist-min": "^4.1.2",
