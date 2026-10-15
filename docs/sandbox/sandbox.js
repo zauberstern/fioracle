@@ -312,7 +312,10 @@
     if (/_level$/.test(id) && value > 0 && value < 1) {
       return (value * 100).toFixed(2) + " pp";
     }
-    if (/avg_return|log_dd|_change/.test(id)) {
+    if (/log_dd/.test(id)) {
+      return value.toFixed(2) + " pp";
+    }
+    if (/avg_return|_change/.test(id)) {
       var bps = value * 10000;
       return (bps >= 0 ? "+" : "") + bps.toFixed(Math.abs(bps) >= 10 ? 1 : 2) + " bps";
     }
