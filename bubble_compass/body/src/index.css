@@ -995,40 +995,48 @@ body,
 
 .cash-feel {
   min-width: 0;
-  max-width: 26rem;
-  padding: 6px 8px 6px;
-  border: 1px solid #d0d1d2;
+  max-width: 30rem;
+  padding: 8px 10px;
+  border: 1px solid #c5c7ca;
+  border-radius: 6px;
   background: #fffefb;
+  box-shadow: 0 2px 8px rgba(23, 26, 32, 0.06);
   font-size: 11px;
   line-height: 1.3;
   color: #171a20;
 }
 .cash-feel-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 10px;
+  flex-wrap: nowrap;
+  gap: 10px;
   align-items: end;
-  margin: 0 0 4px;
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e6e4df;
 }
 .cash-feel-head label {
   display: flex;
   flex-direction: column;
   gap: 2px;
   font-size: 10px;
+  font-weight: 500;
   color: #5c5e62;
+}
+.cash-feel-head label::first-line {
+  color: #393c41;
 }
 .cash-feel-head input,
 .cash-feel-head select {
   min-height: 26px;
-  padding: 2px 4px;
-  border: 0;
-  border-bottom: 1px solid #171a20;
-  background: transparent;
+  padding: 3px 6px;
+  border: 1px solid #d0d1d2;
+  border-radius: 3px;
+  background: #f6f5f1;
   color: #171a20;
   font: inherit;
   font-variant-numeric: tabular-nums;
 }
-.cash-feel-head input { width: 7.5rem; }
+.cash-feel-head input { width: 8.5rem; }
 .cash-feel-tag {
   margin: 0 0 0 auto;
   font-family: var(--font-data);
@@ -1037,7 +1045,7 @@ body,
   align-self: center;
 }
 .cash-feel-pies {
-  margin: 0 0 4px;
+  margin: 0 0 8px;
   padding: 0;
   list-style: none;
   display: grid;
@@ -1080,7 +1088,7 @@ body,
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding-top: 2px;
+  padding-top: 5px;
   border-top: 1px solid #e6e4df;
 }
 .cash-feel-cash span { color: #5c5e62; }
@@ -1302,8 +1310,8 @@ body,
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 44px;
-  padding: 4px 6px 3px;
+  min-height: 52px;
+  padding: 5px 6px 4px;
   border: 1px solid #d0d1d2;
   background: #fffefb;
   color: #171a20;
@@ -1313,11 +1321,9 @@ body,
 }
 
 .mx-name {
-  overflow: hidden;
+  overflow-wrap: anywhere;
   font-size: 10px;
   line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mx-hint-full {
@@ -1325,6 +1331,9 @@ body,
   font-size: 13px;
   line-height: 1.4;
   color: #393c41;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .mx-num {
@@ -2067,7 +2076,7 @@ body,
 }
 
 .diag-limits {
-  margin-top: 8px;
+  margin: 8px 0 12px;
   font-size: 13px;
 }
 

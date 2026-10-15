@@ -319,15 +319,14 @@
   function shortFeature(row) {
     var label = String(row.label || row.id || "");
     return label
-      .replace("average return", "ret")
-      .replace("-day ", "d ")
-      .replace("drawdown", "dd")
-      .replace("Sortino", "Sort")
-      .replace(" change, ", " \u0394")
-      .replace(" change", " \u0394")
-      .replace(" level", "")
-      .replace(", 63-day", " 63d")
-      .replace(", 21-day", " 21d")
+      .replace("average return", "Average return")
+      .replace("drawdown", "Drawdown")
+      .replace("Sortino", "Sortino")
+      .replace(" change, ", " change - ")
+      .replace(" change", " change")
+      .replace(" level", " level")
+      .replace(", 63-day", " - 63-day")
+      .replace(", 21-day", " - 21-day");
       .replace(", 10-day", " 10d")
       .replace(", 252-day", " 1y")
       .replace("Geopolitical risk", "GPR")
@@ -410,7 +409,7 @@
     hud.setAttribute("aria-label", "Inputs");
     var hudTitle = document.createElement("p");
     hudTitle.className = "hud-title";
-    hudTitle.textContent = item.sleeve_label || "Inputs";
+    hudTitle.textContent = "Inputs used for this question";
     hud.appendChild(hudTitle);
     var list = document.createElement("dl");
     list.className = "hud-grid";

@@ -20,6 +20,8 @@ const NAV: Array<{ view: ReadingView; label: string }> = [
   { view: "stillmoor", label: "Stillmoor" },
 ];
 
+const DEFAULT_AS_OF = "2008-09-15";
+
 export type ReadingView =
   | "home"
   | "closer"
@@ -54,9 +56,8 @@ export function AppShell() {
 
   useEffect(() => {
     const pin = readPin(window.location.hash);
-    if (pin.asof) {
-      useMarketStore.getState().setReplayTimestamp(Date.parse(`${pin.asof}T00:00:00Z`) / 1000);
-    }
+    const asOf = pin.asof || DEFAULT_AS_OF;
+    useMarketStore.getState().setReplayTimestamp(Date.parse(`${asOf}T00:00:00Z`) / 1000);
     if (pin.book) {
       useMarketStore.getState().setCurrentAsset(pin.book);
     }

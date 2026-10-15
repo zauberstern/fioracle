@@ -261,9 +261,7 @@ button:disabled { color: var(--dim); border-color: var(--hair); cursor: default;
 }
 .wrow > span {
   min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .wrow input {
   width: 52px;

@@ -123,13 +123,13 @@ export function CashFeel({ date, heat, word, moves, hotName, hotRet }: Props) {
     <aside className="cash-feel" aria-label="What this heat does to parked cash">
       <div className="cash-feel-head">
         <label>
-          Parked
+          Cash amount
           <input
             type="number"
             min={1}
             step={1000}
             value={amount}
-            aria-label="Cash pile"
+            aria-label="Cash amount"
             onChange={(event) => {
               const n = Number(event.target.value);
               if (Number.isFinite(n) && n > 0) setAmount(n);
