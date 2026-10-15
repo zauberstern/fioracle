@@ -326,7 +326,7 @@
       .replace(" change", " change")
       .replace(" level", " level")
       .replace(", 63-day", " - 63-day")
-      .replace(", 21-day", " - 21-day");
+      .replace(", 21-day", " - 21-day")
       .replace(", 10-day", " 10d")
       .replace(", 252-day", " 1y")
       .replace("Geopolitical risk", "GPR")
