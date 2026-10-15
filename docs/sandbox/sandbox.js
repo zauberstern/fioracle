@@ -178,7 +178,7 @@
     }
     if (stats) stats.textContent = "";
     var yoursNow = pathAt(yours, day);
-    fig.textContent = (yoursNow == null ? 0 : yoursNow).toFixed(1);
+    fig.textContent = (yoursNow == null ? "N/A" : yoursNow.toFixed(1));
     if (day == null || day < 0 || yoursNow == null) {
       on.textContent = "Yours has no line yet.";
     } else if (count === 0) {
@@ -197,7 +197,7 @@
       var dt = document.createElement("dt");
       dt.textContent = line.label;
       var dd = document.createElement("dd");
-      dd.textContent = (value == null ? 0 : value).toFixed(1);
+      dd.textContent = value == null ? "N/A" : value.toFixed(1);
       stats.appendChild(dt);
       stats.appendChild(dd);
     });
@@ -307,13 +307,19 @@
   function formatFeature(row) {
     var value = Number(row.value);
     if (!isFinite(value)) return "";
-    if (/_level$/.test(row.id) && value > 0 && value < 1) {
-      return (value * 100).toFixed(2) + "%";
+    var id = String(row.id || "");
+    var abs = Math.abs(value);
+    if (/_level$/.test(id) && value > 0 && value < 1) {
+      return (value * 100).toFixed(2) + " pp";
     }
-    if (Math.abs(value) >= 100) return value.toFixed(1);
-    if (Math.abs(value) >= 1) return value.toFixed(3);
-    if (Math.abs(value) >= 0.01) return value.toFixed(4);
-    return value.toExponential(2);
+    if (/avg_return|log_dd|_change/.test(id)) {
+      var bps = value * 10000;
+      return (bps >= 0 ? "+" : "") + bps.toFixed(Math.abs(bps) >= 10 ? 1 : 2) + " bps";
+    }
+    if (abs >= 100) return value.toFixed(1);
+    if (abs >= 1) return value.toFixed(3);
+    if (abs >= 0.01) return value.toFixed(3);
+    return value.toFixed(4);
   }
 
   function shortFeature(row) {
