@@ -25,9 +25,6 @@
 
 FIOracle fits a jump model that names three states on a fixed-income book: calm, inflationary, and crisis. An XGBoost classifier then forecasts the next state from today's returns and macros. The long-only weights that follow are minimum variance, mean variance, and equal weight.
 
-**Research software. Not investment advice. Backtests are hypothetical performance.**
-See `paper/compliance/HYPOTHETICAL_PERFORMANCE.md`. Do not post ERoD/Sharpe tables as mass-market performance.
-
 <h2 id="meridian">Meridian</h2>
 
 Meridian reads 23 public books on a date you choose. It keeps the latest row dated on or before that date. Heat runs from 0 to 100. Under 40 the book is Quiet, from 40 it is Warming, and from 70 it is Stretched. Cash stays at 0.
@@ -44,7 +41,7 @@ The published split is train 1965–1994, validation 1995–2007, and test from 
 
 ### Asset universe (paper freeze)
 
-**18 investable** series (see `config/config.yaml` / `paper/PAPER_EXPERIMENT.md`): cash, US Treasuries (cash through long), US and global aggregate and credit, EM USD aggregate, TIPS and the 5-year inflation swap, global inflation-linked bonds 0–5, Swiss franc, the USD swaption 1Y5Y, and Swiss government 7–15.
+**18 investable** series: cash, US Treasuries (cash through long), US and global aggregate and credit, EM USD aggregate, TIPS and the 5-year inflation swap, global inflation-linked bonds 0–5, Swiss franc, the USD swaption 1Y5Y, and Swiss government 7–15.
 
 23 other series load for research context and stay out of the optimizer.
 
