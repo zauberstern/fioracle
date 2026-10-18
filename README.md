@@ -312,7 +312,7 @@ The FI convexity overlay keeps `features.dii.enabled: false` and `vrp_overlay.en
 }
 ```
 
-Shu, Yu, and Mulvey (2024) is the method source: *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*, Annals of Operations Research, [DOI 10.1007/s10479-024-06266-0](https://doi.org/10.1007/s10479-024-06266-0), [arXiv:2406.09578](https://arxiv.org/abs/2406.09578). The local copy is [`paper.pdf`](paper.pdf). See `paper/refs/shu_yu_mulvey_2024.bib`.
+Shu, Yu, and Mulvey (2024) is the method source: *Dynamic Asset Allocation with Asset-Specific Regime Forecasts*, Annals of Operations Research, [DOI 10.1007/s10479-024-06266-0](https://doi.org/10.1007/s10479-024-06266-0), [arXiv:2406.09578](https://arxiv.org/abs/2406.09578). 
 
 ### License
 
